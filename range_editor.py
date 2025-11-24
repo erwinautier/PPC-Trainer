@@ -1,11 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""
-Created on Mon Nov 24 13:57:13 2025
-
-@author: erwinautier
-"""
-
 # ranges_editor.py
 import os
 import json
@@ -19,94 +11,166 @@ import streamlit as st
 RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
 POSITIONS = ["LJ", "HJ", "CO", "BTN", "SB", "BB"]
 STACKS = [100, 50, 25, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10]
-SCENARIOS = ["open"]  # on pourra plus tard ajouter "bb_vs_open", etc.
+SCENARIOS = ["open"]  # on pourra étendre plus tard
 
-# Génération de toutes les mains de type AA, AKs, AKo, ...
-def generate_all_hands():
-    hands = set()
-    # Paires
-    for r in RANKS:
-        hands.add(r + r)
-    # Suited et Offsuited
-    for i, r1 in enumerate(RANKS):
-        for r2 in RANKS[i + 1 :]:
-            hands.add(r1 + r2 + "s")
-            hands.add(r1 + r2 + "o")
-    return hands
+ACTIONS = ["open", "call", "threebet", "fold"]
+ACTION_LABELS = {
+    "open": "Open",
+    "call": "Call",
+    "threebet": "3-bet",
+    "fold": "Fold",
+}
+# Couleurs via emojis (simple & fiable dans Streamlit)
+ACTION_SYMBOLS = {
+    None: "⬜",       # vide / aucune action
+    "open": "🟢",     # vert
+    "call": "🟡",     # jaune
+    "threebet": "🔴", # rouge
+    "fold": "🔵",     # bleu
+}
 
-ALL_HANDS = generate_all_hands()
-
-
-def parse_hand_list(text: str):
-    """
-    Parse une liste de mains séparées par virgules ou retours à la ligne.
-    Ne garde que les mains valides (AA, AKs, AKo, ...).
-    Retourne (liste_valides, liste_invalides).
-    """
-    raw = text.replace("\n", ",").split(",")
-    items = [h.strip().upper() for h in raw if h.strip()]
-    valid = [h for h in items if h in ALL_HANDS]
-    invalid = [h for h in items if h not in ALL_HANDS]
-    return sorted(set(valid)), sorted(set(invalid))
+# -----------------------------
+# Utilitaires
+# -----------------------------
+def base_dir():
+    return os.path.dirname(os.path.abspath(__file__))
 
 
 def make_spot_key(position: str, stack: int, scenario: str) -> str:
     return f"{position}_{stack}_{scenario}"
 
 
+def canonical_hand_from_indices(i: int, j: int) -> str:
+    """
+    Convertit indices (ligne, colonne) de la matrice 13x13 en main canonique :
+    - diagonale : paires (AA, KK, QQ, ...)
+    - triangle supérieur : offsuited (AKo, AKo, ...)
+    - triangle inférieur : suited (AKs, KQs, ...)
+    La convention classique : triangle supérieur = offsuit, inférieur = suited.
+    """
+    r1 = RANKS[i]
+    r2 = RANKS[j]
+    if i == j:
+        return r1 + r2  # paire
+    # on met toujours la plus forte carte en premier dans le code
+    idx1 = RANKS.index(r1)
+    idx2 = RANKS.index(r2)
+    if idx1 < idx2:
+        hi, lo = r1, r2
+    else:
+        hi, lo = r2, r1
+    if i < j:
+        # triangle supérieur : offsuit
+        return hi + lo + "o"
+    else:
+        # triangle inférieur : suited
+        return hi + lo + "s"
+
+
+def all_hands_set():
+    hands = set()
+    for i in range(len(RANKS)):
+        for j in range(len(RANKS)):
+            hands.add(canonical_hand_from_indices(i, j))
+    return hands
+
+
+ALL_HANDS = all_hands_set()
+
+
 # -----------------------------
 # Config Streamlit
 # -----------------------------
 st.set_page_config(
-    page_title="Éditeur de ranges",
+    page_title="Éditeur de ranges (grille)",
     page_icon="🧮",
     layout="wide",
 )
 
-st.title("🧮 Éditeur de ranges préflop")
+st.title("🧮 Éditeur de ranges préflop – mode grille cliquable")
 
 st.markdown(
     """
-Cette application te permet de **créer / éditer** tes propres ranges et de les
-**exporter en fichier JSON**.  
-Ce fichier pourra ensuite être utilisé par ton *Poker Trainer* pour afficher une *correction*.
+Clique sur les cases de la grille pour associer chaque main à une action **Open / Call / 3-bet / Fold**.  
+Tu peux ensuite **télécharger** un fichier JSON compatible avec le Poker Trainer.
 """
 )
 
 # -----------------------------
 # État en session
 # -----------------------------
-if "ranges" not in st.session_state:
-    # ranges : dict[spot_key] -> dict{"position","stack","scenario","actions":{...}}
-    st.session_state.ranges = {}
+if "spots" not in st.session_state:
+    # spots : dict[spot_key] -> {"position","stack","scenario","hand_actions": {hand: action}}
+    st.session_state.spots = {}
+
+if "current_spot_key" not in st.session_state:
+    st.session_state.current_spot_key = None
+
+if "current_action" not in st.session_state:
+    st.session_state.current_action = "open"
 
 # -----------------------------
 # Sidebar : chargement / sauvegarde
 # -----------------------------
 st.sidebar.header("Fichiers de ranges")
 
-uploaded = st.sidebar.file_uploader("Charger un fichier de ranges (.json)", type=["json"])
+uploaded = st.sidebar.file_uploader(
+    "Charger un fichier de ranges (.json)", type=["json"]
+)
 if uploaded is not None:
     try:
         data = json.load(uploaded)
-        spots = data.get("spots", {})
-        if isinstance(spots, dict):
-            st.session_state.ranges = spots
-            st.sidebar.success("Fichier de ranges chargé avec succès ✅")
-        else:
-            st.sidebar.error("Format JSON inattendu : champ 'spots' absent ou incorrect.")
+        spots_json = data.get("spots", {})
+        new_spots = {}
+        for key, spot in spots_json.items():
+            pos = spot.get("position")
+            stack = spot.get("stack")
+            scen = spot.get("scenario", "open")
+            actions = spot.get("actions", {})
+            hand_actions = {}
+            for act_name in ACTIONS:
+                for h in actions.get(act_name, []):
+                    if h in ALL_HANDS:
+                        hand_actions[h] = act_name
+            new_spots[key] = {
+                "position": pos,
+                "stack": stack,
+                "scenario": scen,
+                "hand_actions": hand_actions,
+            }
+        st.session_state.spots = new_spots
+        st.sidebar.success("Fichier de ranges chargé avec succès ✅")
     except Exception as e:
         st.sidebar.error(f"Erreur de lecture du fichier : {e}")
 
-# Bouton pour réinitialiser tout
+# Bouton pour tout effacer (dans la session)
 if st.sidebar.button("🗑️ Effacer toutes les ranges de la session"):
-    st.session_state.ranges = {}
+    st.session_state.spots = {}
     st.sidebar.success("Toutes les ranges ont été effacées (dans la session).")
 
-# Génération du JSON pour téléchargement
+# Préparation export JSON au format ancien (actions -> listes de mains)
+export_spots = {}
+for key, spot in st.session_state.spots.items():
+    pos = spot["position"]
+    stack = spot["stack"]
+    scen = spot["scenario"]
+    hand_actions = spot.get("hand_actions", {})
+    actions_dict = defaultdict(list)
+    for hand, act in hand_actions.items():
+        if act in ACTIONS:
+            actions_dict[act].append(hand)
+    export_spots[key] = {
+        "position": pos,
+        "stack": stack,
+        "scenario": scen,
+        "actions": {
+            act: sorted(hands) for act, hands in actions_dict.items()
+        },
+    }
+
 export_data = {
     "version": 1,
-    "spots": st.session_state.ranges,
+    "spots": export_spots,
 }
 export_json = json.dumps(export_data, indent=2)
 
@@ -117,15 +181,8 @@ st.sidebar.download_button(
     mime="application/json",
 )
 
-st.sidebar.markdown(
-    """
-Format des mains attendu : `AA`, `KK`, `AKs`, `AQo`, `T9s`, etc.  
-Pas de raccourcis `22+`, `A2s+` pour l'instant.
-"""
-)
-
 # -----------------------------
-# Paramètres du spot en cours d'édition
+# Sélection du spot
 # -----------------------------
 st.subheader("🎯 Sélection du spot à éditer")
 
@@ -138,79 +195,76 @@ with col_sel3:
     scenario = st.selectbox("Scénario", SCENARIOS, index=0)
 
 spot_key = make_spot_key(position, stack, scenario)
+st.session_state.current_spot_key = spot_key
+
 st.markdown(f"*Clé du spot :* `{spot_key}`")
 
-# Récupération ou création du spot
-current_spot = st.session_state.ranges.get(
+# Récupération / création du spot courant
+current_spot = st.session_state.spots.get(
     spot_key,
     {
         "position": position,
         "stack": stack,
         "scenario": scenario,
-        "actions": {
-            "open": [],
-            "call": [],
-            "threebet": [],
-            "fold": [],
-        },
+        "hand_actions": {},  # hand_code -> action
     },
 )
-actions = current_spot["actions"]
+hand_actions = current_spot["hand_actions"]
 
 # -----------------------------
-# Saisie des mains par action
+# Choix de l'action active
 # -----------------------------
-st.subheader("✏️ Édition des mains pour ce spot")
+st.subheader("🖱️ Action en cours")
 
-st.markdown(
-    """
-Entre les mains dans chaque zone, séparées par des virgules ou des retours à la ligne.  
-Exemple : `AA, KK, QQ, AKs, AKo, KQs`
-"""
+action_names = ACTIONS + ["effacer"]
+def format_action(a):
+    if a == "effacer":
+        return "❌ Effacer"
+    return f"{ACTION_SYMBOLS[a]} {ACTION_LABELS[a]}"
+
+current_action = st.radio(
+    "Cliquer sur la grille appliquera cette action à la main choisie :",
+    options=action_names,
+    index=0,
+    format_func=format_action,
+    horizontal=True,
 )
+st.session_state.current_action = current_action
 
-tab_open, tab_call, tab_3bet, tab_fold = st.tabs(["Open", "Call", "3-bet", "Fold"])
+if st.button("🧹 Effacer toutes les mains de ce spot"):
+    hand_actions.clear()
+    st.success("Toutes les mains de ce spot ont été effacées.")
 
-def hands_to_text(hands_list):
-    return ", ".join(hands_list)
+# -----------------------------
+# Grille 13x13
+# -----------------------------
+st.subheader("🧩 Grille des mains (cliquer pour changer l'action)")
 
-with tab_open:
-    open_text = st.text_area("Mains qui **ouvrent** (open)", value=hands_to_text(actions.get("open", [])), height=120)
-with tab_call:
-    call_text = st.text_area("Mains qui **call**", value=hands_to_text(actions.get("call", [])), height=120)
-with tab_3bet:
-    threebet_text = st.text_area("Mains qui **3-bet**", value=hands_to_text(actions.get("threebet", [])), height=120)
-with tab_fold:
-    fold_text = st.text_area("Mains qui **foldent**", value=hands_to_text(actions.get("fold", [])), height=120)
+# Ligne d'en-tête des colonnes
+header_cols = st.columns(len(RANKS) + 1)
+header_cols[0].markdown(" ")
+for j, r2 in enumerate(RANKS):
+    header_cols[j + 1].markdown(f"<div style='text-align:center;'><b>{r2}</b></div>", unsafe_allow_html=True)
 
-# Bouton d'analyse / mise à jour
-if st.button("✅ Enregistrer ce spot dans la session"):
-    open_valid, open_invalid = parse_hand_list(open_text)
-    call_valid, call_invalid = parse_hand_list(call_text)
-    threebet_valid, threebet_invalid = parse_hand_list(threebet_text)
-    fold_valid, fold_invalid = parse_hand_list(fold_text)
+for i, r1 in enumerate(RANKS):
+    cols = st.columns(len(RANKS) + 1)
+    # En-tête de ligne
+    cols[0].markdown(f"<div style='text-align:center;'><b>{r1}</b></div>", unsafe_allow_html=True)
+    for j, r2 in enumerate(RANKS):
+        hand_code = canonical_hand_from_indices(i, j)
+        act = hand_actions.get(hand_code, None)
+        symbol = ACTION_SYMBOLS.get(act, "⬜")
+        # On affiche juste le symbole coloré sur le bouton
+        if cols[j + 1].button(symbol, key=f"{spot_key}_{hand_code}"):
+            if st.session_state.current_action == "effacer":
+                if hand_code in hand_actions:
+                    del hand_actions[hand_code]
+            else:
+                hand_actions[hand_code] = st.session_state.current_action
 
-    # On pourrait, si on veut, forcer une main à n'appartenir qu'à une seule catégorie,
-    # mais pour l'instant on laisse la responsabilité à l'utilisateur.
-    current_spot["actions"]["open"] = open_valid
-    current_spot["actions"]["call"] = call_valid
-    current_spot["actions"]["threebet"] = threebet_valid
-    current_spot["actions"]["fold"] = fold_valid
-
-    st.session_state.ranges[spot_key] = current_spot
-
-    st.success("Spot enregistré dans la session ✅")
-
-    # Feedback sur les mains invalides
-    invalid_all = {
-        "open": open_invalid,
-        "call": call_invalid,
-        "3-bet": threebet_invalid,
-        "fold": fold_invalid,
-    }
-    for action_name, inv in invalid_all.items():
-        if inv:
-            st.warning(f"Mains non reconnues pour {action_name} : {', '.join(inv)}")
+# On remet le spot modifié dans la session
+current_spot["hand_actions"] = hand_actions
+st.session_state.spots[spot_key] = current_spot
 
 # -----------------------------
 # Aperçu des spots existants
@@ -218,18 +272,23 @@ if st.button("✅ Enregistrer ce spot dans la session"):
 st.markdown("---")
 st.subheader("📚 Spots actuellement définis")
 
-if not st.session_state.ranges:
+if not st.session_state.spots:
     st.info("Aucun spot encore enregistré dans la session.")
 else:
-    for key, spot in sorted(st.session_state.ranges.items()):
+    for key, spot in sorted(st.session_state.spots.items()):
         pos = spot["position"]
         stck = spot["stack"]
         scen = spot["scenario"]
-        acts = spot["actions"]
+        ha = spot.get("hand_actions", {})
+        counts = defaultdict(int)
+        for act in ha.values():
+            if act in ACTIONS:
+                counts[act] += 1
         st.markdown(f"**{key}** – {pos}, {stck} BB, scénario `{scen}`")
         st.markdown(
-            f"- Open : {len(acts.get('open', []))} mains\n"
-            f"- Call : {len(acts.get('call', []))} mains\n"
-            f"- 3-bet : {len(acts.get('threebet', []))} mains\n"
-            f"- Fold : {len(acts.get('fold', []))} mains"
+            f"- {ACTION_SYMBOLS['open']} Open : {counts['open']} mains\n"
+            f"- {ACTION_SYMBOLS['call']} Call : {counts['call']} mains\n"
+            f"- {ACTION_SYMBOLS['threebet']} 3-bet : {counts['threebet']} mains\n"
+            f"- {ACTION_SYMBOLS['fold']} Fold : {counts['fold']} mains"
         )
+
