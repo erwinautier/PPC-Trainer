@@ -29,6 +29,9 @@ ACTION_EMOJI = {
 EMPTY_EMOJI = "⬜"
 
 
+# -----------------------------
+# Utilitaires
+# -----------------------------
 def base_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
@@ -38,6 +41,10 @@ def make_spot_key(position: str, stack: int, scenario: str) -> str:
 
 
 def canonical_hand_from_indices(i: int, j: int) -> str:
+    """
+    Convertit indices (ligne, colonne) en main canonique :
+    diagonale = paires, triangle sup = offsuit, triangle inf = suited.
+    """
     r1 = RANKS[i]
     r2 = RANKS[j]
     if i == j:
@@ -64,6 +71,47 @@ def all_hands_set():
 
 ALL_HANDS = all_hands_set()
 
+
+# -----------------------------
+# Callback pour un clic sur une main
+# -----------------------------
+def update_hand_action(spot_key: str, hand_code: str):
+    """Callback appelé quand on clique sur un bouton de la grille."""
+    spots = st.session_state.spots
+    # récupérer le spot existant ou le créer
+    spot = spots.get(
+        spot_key,
+        {
+            "position": spot_key.split("_")[0],
+            "stack": int(spot_key.split("_")[1]),
+            "scenario": spot_key.split("_")[2],
+            "hand_actions": {},
+        },
+    )
+    hand_actions = spot.get("hand_actions", {})
+    current_action = st.session_state.current_action
+
+    if current_action == "effacer":
+        # enlever toutes les actions pour cette main
+        if hand_code in hand_actions:
+            del hand_actions[hand_code]
+    else:
+        act = current_action
+        s = hand_actions.get(hand_code, set())
+        if act in s:
+            s.remove(act)
+        else:
+            s.add(act)
+        if s:
+            hand_actions[hand_code] = s
+        elif hand_code in hand_actions:
+            del hand_actions[hand_code]
+
+    spot["hand_actions"] = hand_actions
+    spots[spot_key] = spot
+    st.session_state.spots = spots
+
+
 # -----------------------------
 # Config Streamlit
 # -----------------------------
@@ -88,7 +136,8 @@ st.markdown(
 # État en session
 # -----------------------------
 if "spots" not in st.session_state:
-    st.session_state.spots = {}   # spot_key -> {position, stack, scenario, hand_actions}
+    # spot_key -> {"position","stack","scenario","hand_actions": {hand: set(actions)}}
+    st.session_state.spots = {}
 
 if "current_spot_key" not in st.session_state:
     st.session_state.current_spot_key = None
@@ -134,7 +183,7 @@ if st.sidebar.button("🗑️ Effacer toutes les ranges de la session"):
     st.session_state.spots = {}
     st.sidebar.success("Toutes les ranges ont été effacées (dans la session).")
 
-# Préparation export JSON (mains non marquées -> fold)
+# Préparation export JSON (cases vides -> fold)
 export_spots = {}
 for key, spot in st.session_state.spots.items():
     pos = spot["position"]
@@ -194,7 +243,7 @@ current_spot = st.session_state.spots.get(
         "position": position,
         "stack": stack,
         "scenario": scenario,
-        "hand_actions": {},  # hand_code -> set(actions)
+        "hand_actions": {},
     },
 )
 hand_actions = current_spot["hand_actions"]
@@ -231,7 +280,7 @@ if st.button("🧹 Effacer toutes les mains de ce spot"):
     st.success("Toutes les mains de ce spot ont été effacées.")
 
 # -----------------------------
-# Grille 13x13 (avec rerun immédiat après clic)
+# Grille 13x13 (avec callbacks on_click)
 # -----------------------------
 st.subheader("🧩 Grille des mains")
 
@@ -261,30 +310,17 @@ for i, r1 in enumerate(RANKS):
             )
         label = f"{prefix} {hand_code}"
 
-        if cols[j + 1].button(label, key=f"{spot_key}_{hand_code}"):
-            # Mise à jour de l'état pour cette main
-            if st.session_state.current_action == "effacer":
-                if hand_code in hand_actions:
-                    del hand_actions[hand_code]
-            else:
-                act = st.session_state.current_action
-                s = hand_actions.get(hand_code, set())
-                if act in s:
-                    s.remove(act)
-                else:
-                    s.add(act)
-                if s:
-                    hand_actions[hand_code] = s
-                elif hand_code in hand_actions:
-                    del hand_actions[hand_code]
+        cols[j + 1].button(
+            label,
+            key=f"{spot_key}_{hand_code}",
+            on_click=update_hand_action,
+            args=(spot_key, hand_code),
+        )
 
-            # Persister le spot et forcer un rerun pour voir la couleur immédiatement
-            current_spot["hand_actions"] = hand_actions
-            st.session_state.spots[spot_key] = current_spot
-            st.experimental_rerun()
-
-# On remet le spot modifié (si pas déjà fait dans un clic)
-current_spot["hand_actions"] = hand_actions
+# remettre le spot modifié en session
+current_spot["hand_actions"] = st.session_state.spots.get(spot_key, current_spot)[
+    "hand_actions"
+]
 st.session_state.spots[spot_key] = current_spot
 
 # -----------------------------
