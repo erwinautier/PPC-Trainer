@@ -56,9 +56,9 @@ def canonical_hand_from_indices(i: int, j: int) -> str:
     else:
         hi, lo = r2, r1
     if i < j:
-        return hi + lo + "o"
-    else:
         return hi + lo + "s"
+    else:
+        return hi + lo + "o"
 
 
 def all_hands_set():
