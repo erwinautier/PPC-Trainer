@@ -20,19 +20,15 @@ ACTION_LABELS = {
     "threebet": "3-bet",
     "fold": "Fold",
 }
-# Emojis pour chaque action
 ACTION_EMOJI = {
     "open": "🟢",
     "call": "🟡",
     "threebet": "🔴",
     "fold": "🔵",
 }
-EMPTY_EMOJI = "⬜"  # aucune action marquée
+EMPTY_EMOJI = "⬜"
 
 
-# -----------------------------
-# Utilitaires
-# -----------------------------
 def base_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
@@ -42,13 +38,6 @@ def make_spot_key(position: str, stack: int, scenario: str) -> str:
 
 
 def canonical_hand_from_indices(i: int, j: int) -> str:
-    """
-    Convertit indices (ligne, colonne) de la matrice 13x13 en main canonique :
-    - diagonale : paires (AA, KK, ...)
-    - triangle supérieur : offsuit (AKo, AQo, ...)
-    - triangle inférieur : suited (AKs, KQs, ...)
-    Convention standard : triangle sup. = off, triangle inf. = suited.
-    """
     r1 = RANKS[i]
     r2 = RANKS[j]
     if i == j:
@@ -75,7 +64,6 @@ def all_hands_set():
 
 ALL_HANDS = all_hands_set()
 
-
 # -----------------------------
 # Config Streamlit
 # -----------------------------
@@ -100,8 +88,7 @@ st.markdown(
 # État en session
 # -----------------------------
 if "spots" not in st.session_state:
-    # spots : dict[spot_key] -> {"position","stack","scenario","hand_actions": {hand: set(actions)}}
-    st.session_state.spots = {}
+    st.session_state.spots = {}   # spot_key -> {position, stack, scenario, hand_actions}
 
 if "current_spot_key" not in st.session_state:
     st.session_state.current_spot_key = None
@@ -128,7 +115,6 @@ if uploaded is not None:
             scen = spot.get("scenario", "open")
             actions = spot.get("actions", {})
             hand_actions = {}
-            # convertir actions -> sets
             for act_name in ACTIONS:
                 for h in actions.get(act_name, []):
                     if h in ALL_HANDS:
@@ -144,13 +130,11 @@ if uploaded is not None:
     except Exception as e:
         st.sidebar.error(f"Erreur de lecture du fichier : {e}")
 
-# Bouton pour tout effacer (dans la session)
 if st.sidebar.button("🗑️ Effacer toutes les ranges de la session"):
     st.session_state.spots = {}
     st.sidebar.success("Toutes les ranges ont été effacées (dans la session).")
 
-# Préparation export JSON :
-#  - si une main n'a AUCUNE action => c'est *fold* par défaut.
+# Préparation export JSON (mains non marquées -> fold)
 export_spots = {}
 for key, spot in st.session_state.spots.items():
     pos = spot["position"]
@@ -159,11 +143,9 @@ for key, spot in st.session_state.spots.items():
     hand_actions = spot.get("hand_actions", {})
 
     actions_dict = defaultdict(list)
-    # on parcourt toutes les mains possibles
     for h in ALL_HANDS:
         acts = hand_actions.get(h, set())
         if not acts:
-            # pas d'action cochée => fold par défaut
             actions_dict["fold"].append(h)
         else:
             for act in acts:
@@ -179,10 +161,7 @@ for key, spot in st.session_state.spots.items():
         },
     }
 
-export_data = {
-    "version": 1,
-    "spots": export_spots,
-}
+export_data = {"version": 1, "spots": export_spots}
 export_json = json.dumps(export_data, indent=2)
 
 st.sidebar.download_button(
@@ -207,10 +186,8 @@ with col_sel3:
 
 spot_key = make_spot_key(position, stack, scenario)
 st.session_state.current_spot_key = spot_key
-
 st.markdown(f"*Clé du spot :* `{spot_key}`")
 
-# Récupération / création du spot courant
 current_spot = st.session_state.spots.get(
     spot_key,
     {
@@ -222,7 +199,6 @@ current_spot = st.session_state.spots.get(
 )
 hand_actions = current_spot["hand_actions"]
 
-# Bouton d'enregistrement explicite
 if st.button("💾 Enregistrer cette range (ce spot)"):
     st.session_state.spots[spot_key] = current_spot
     st.success(f"Range enregistrée pour {spot_key}. Tu peux passer à une autre.")
@@ -255,11 +231,11 @@ if st.button("🧹 Effacer toutes les mains de ce spot"):
     st.success("Toutes les mains de ce spot ont été effacées.")
 
 # -----------------------------
-# Grille 13x13
+# Grille 13x13 (avec rerun immédiat après clic)
 # -----------------------------
 st.subheader("🧩 Grille des mains")
 
-# Ligne d'en-tête des colonnes
+# En-tête colonnes
 header_cols = st.columns(len(RANKS) + 1)
 header_cols[0].markdown(" ")
 for j, r2 in enumerate(RANKS):
@@ -270,7 +246,6 @@ for j, r2 in enumerate(RANKS):
 
 for i, r1 in enumerate(RANKS):
     cols = st.columns(len(RANKS) + 1)
-    # En-tête de ligne
     cols[0].markdown(
         f"<div style='text-align:center;'><b>{r1}</b></div>",
         unsafe_allow_html=True,
@@ -281,18 +256,17 @@ for i, r1 in enumerate(RANKS):
         if not acts:
             prefix = EMPTY_EMOJI
         else:
-            # plusieurs actions possibles -> concat d'emojis
-            prefix = "".join(ACTION_EMOJI[a] for a in sorted(acts) if a in ACTION_EMOJI)
-
-        label = f"{prefix} {hand_code}"  # ex : "🟢🔴 AKo"
+            prefix = "".join(
+                ACTION_EMOJI[a] for a in sorted(acts) if a in ACTION_EMOJI
+            )
+        label = f"{prefix} {hand_code}"
 
         if cols[j + 1].button(label, key=f"{spot_key}_{hand_code}"):
+            # Mise à jour de l'état pour cette main
             if st.session_state.current_action == "effacer":
-                # effacer toutes les actions de cette main
                 if hand_code in hand_actions:
                     del hand_actions[hand_code]
             else:
-                # toggle de l'action dans l'ensemble
                 act = st.session_state.current_action
                 s = hand_actions.get(hand_code, set())
                 if act in s:
@@ -304,7 +278,12 @@ for i, r1 in enumerate(RANKS):
                 elif hand_code in hand_actions:
                     del hand_actions[hand_code]
 
-# remettre le spot modifié dans la session
+            # Persister le spot et forcer un rerun pour voir la couleur immédiatement
+            current_spot["hand_actions"] = hand_actions
+            st.session_state.spots[spot_key] = current_spot
+            st.experimental_rerun()
+
+# On remet le spot modifié (si pas déjà fait dans un clic)
 current_spot["hand_actions"] = hand_actions
 st.session_state.spots[spot_key] = current_spot
 
@@ -324,7 +303,6 @@ else:
         ha = spot.get("hand_actions", {})
         counts = defaultdict(int)
 
-        # compter en considérant : mains sans action => fold
         for h in ALL_HANDS:
             acts = ha.get(h, set())
             if not acts:
