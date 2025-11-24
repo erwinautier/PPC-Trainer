@@ -11,7 +11,7 @@ import streamlit as st
 RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
 POSITIONS = ["LJ", "HJ", "CO", "BTN", "SB", "BB"]
 STACKS = [100, 50, 25, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10]
-SCENARIOS = ["open"]  # on pourra étendre plus tard
+SCENARIOS = ["open"]  # extensible plus tard
 
 ACTIONS = ["open", "call", "threebet", "fold"]
 ACTION_LABELS = {
@@ -20,14 +20,15 @@ ACTION_LABELS = {
     "threebet": "3-bet",
     "fold": "Fold",
 }
-# Couleurs via emojis (simple & fiable dans Streamlit)
-ACTION_SYMBOLS = {
-    None: "⬜",       # vide / aucune action
-    "open": "🟢",     # vert
-    "call": "🟡",     # jaune
-    "threebet": "🔴", # rouge
-    "fold": "🔵",     # bleu
+# Emojis pour chaque action
+ACTION_EMOJI = {
+    "open": "🟢",
+    "call": "🟡",
+    "threebet": "🔴",
+    "fold": "🔵",
 }
+EMPTY_EMOJI = "⬜"  # aucune action marquée
+
 
 # -----------------------------
 # Utilitaires
@@ -43,16 +44,15 @@ def make_spot_key(position: str, stack: int, scenario: str) -> str:
 def canonical_hand_from_indices(i: int, j: int) -> str:
     """
     Convertit indices (ligne, colonne) de la matrice 13x13 en main canonique :
-    - diagonale : paires (AA, KK, QQ, ...)
-    - triangle supérieur : offsuited (AKo, AKo, ...)
+    - diagonale : paires (AA, KK, ...)
+    - triangle supérieur : offsuit (AKo, AQo, ...)
     - triangle inférieur : suited (AKs, KQs, ...)
-    La convention classique : triangle supérieur = offsuit, inférieur = suited.
+    Convention standard : triangle sup. = off, triangle inf. = suited.
     """
     r1 = RANKS[i]
     r2 = RANKS[j]
     if i == j:
-        return r1 + r2  # paire
-    # on met toujours la plus forte carte en premier dans le code
+        return r1 + r2
     idx1 = RANKS.index(r1)
     idx2 = RANKS.index(r2)
     if idx1 < idx2:
@@ -60,10 +60,8 @@ def canonical_hand_from_indices(i: int, j: int) -> str:
     else:
         hi, lo = r2, r1
     if i < j:
-        # triangle supérieur : offsuit
         return hi + lo + "o"
     else:
-        # triangle inférieur : suited
         return hi + lo + "s"
 
 
@@ -91,8 +89,10 @@ st.title("🧮 Éditeur de ranges préflop – mode grille cliquable")
 
 st.markdown(
     """
-Clique sur les cases de la grille pour associer chaque main à une action **Open / Call / 3-bet / Fold**.  
-Tu peux ensuite **télécharger** un fichier JSON compatible avec le Poker Trainer.
+- **Clique** sur les cases pour affecter des actions (Open / Call / 3-bet / Fold).  
+- Une case peut avoir **plusieurs actions** (mix : par ex. Open + 3-bet).  
+- Toute case **non cochée** sera considérée comme **Fold** par défaut dans le fichier exporté.  
+- Tu peux créer **une liste de ranges** (spots) : un spot = Position + Stack + Scénario.
 """
 )
 
@@ -100,7 +100,7 @@ Tu peux ensuite **télécharger** un fichier JSON compatible avec le Poker Train
 # État en session
 # -----------------------------
 if "spots" not in st.session_state:
-    # spots : dict[spot_key] -> {"position","stack","scenario","hand_actions": {hand: action}}
+    # spots : dict[spot_key] -> {"position","stack","scenario","hand_actions": {hand: set(actions)}}
     st.session_state.spots = {}
 
 if "current_spot_key" not in st.session_state:
@@ -128,10 +128,11 @@ if uploaded is not None:
             scen = spot.get("scenario", "open")
             actions = spot.get("actions", {})
             hand_actions = {}
+            # convertir actions -> sets
             for act_name in ACTIONS:
                 for h in actions.get(act_name, []):
                     if h in ALL_HANDS:
-                        hand_actions[h] = act_name
+                        hand_actions.setdefault(h, set()).add(act_name)
             new_spots[key] = {
                 "position": pos,
                 "stack": stack,
@@ -148,17 +149,27 @@ if st.sidebar.button("🗑️ Effacer toutes les ranges de la session"):
     st.session_state.spots = {}
     st.sidebar.success("Toutes les ranges ont été effacées (dans la session).")
 
-# Préparation export JSON au format ancien (actions -> listes de mains)
+# Préparation export JSON :
+#  - si une main n'a AUCUNE action => c'est *fold* par défaut.
 export_spots = {}
 for key, spot in st.session_state.spots.items():
     pos = spot["position"]
     stack = spot["stack"]
     scen = spot["scenario"]
     hand_actions = spot.get("hand_actions", {})
+
     actions_dict = defaultdict(list)
-    for hand, act in hand_actions.items():
-        if act in ACTIONS:
-            actions_dict[act].append(hand)
+    # on parcourt toutes les mains possibles
+    for h in ALL_HANDS:
+        acts = hand_actions.get(h, set())
+        if not acts:
+            # pas d'action cochée => fold par défaut
+            actions_dict["fold"].append(h)
+        else:
+            for act in acts:
+                if act in ACTIONS:
+                    actions_dict[act].append(h)
+
     export_spots[key] = {
         "position": pos,
         "stack": stack,
@@ -206,10 +217,15 @@ current_spot = st.session_state.spots.get(
         "position": position,
         "stack": stack,
         "scenario": scenario,
-        "hand_actions": {},  # hand_code -> action
+        "hand_actions": {},  # hand_code -> set(actions)
     },
 )
 hand_actions = current_spot["hand_actions"]
+
+# Bouton d'enregistrement explicite
+if st.button("💾 Enregistrer cette range (ce spot)"):
+    st.session_state.spots[spot_key] = current_spot
+    st.success(f"Range enregistrée pour {spot_key}. Tu peux passer à une autre.")
 
 # -----------------------------
 # Choix de l'action active
@@ -217,13 +233,16 @@ hand_actions = current_spot["hand_actions"]
 st.subheader("🖱️ Action en cours")
 
 action_names = ACTIONS + ["effacer"]
+
+
 def format_action(a):
     if a == "effacer":
         return "❌ Effacer"
-    return f"{ACTION_SYMBOLS[a]} {ACTION_LABELS[a]}"
+    return f"{ACTION_EMOJI[a]} {ACTION_LABELS[a]}"
+
 
 current_action = st.radio(
-    "Cliquer sur la grille appliquera cette action à la main choisie :",
+    "Cliquer sur la grille appliquera / enlèvera cette action pour la main choisie :",
     options=action_names,
     index=0,
     format_func=format_action,
@@ -238,31 +257,54 @@ if st.button("🧹 Effacer toutes les mains de ce spot"):
 # -----------------------------
 # Grille 13x13
 # -----------------------------
-st.subheader("🧩 Grille des mains (cliquer pour changer l'action)")
+st.subheader("🧩 Grille des mains")
 
 # Ligne d'en-tête des colonnes
 header_cols = st.columns(len(RANKS) + 1)
 header_cols[0].markdown(" ")
 for j, r2 in enumerate(RANKS):
-    header_cols[j + 1].markdown(f"<div style='text-align:center;'><b>{r2}</b></div>", unsafe_allow_html=True)
+    header_cols[j + 1].markdown(
+        f"<div style='text-align:center;'><b>{r2}</b></div>",
+        unsafe_allow_html=True,
+    )
 
 for i, r1 in enumerate(RANKS):
     cols = st.columns(len(RANKS) + 1)
     # En-tête de ligne
-    cols[0].markdown(f"<div style='text-align:center;'><b>{r1}</b></div>", unsafe_allow_html=True)
+    cols[0].markdown(
+        f"<div style='text-align:center;'><b>{r1}</b></div>",
+        unsafe_allow_html=True,
+    )
     for j, r2 in enumerate(RANKS):
         hand_code = canonical_hand_from_indices(i, j)
-        act = hand_actions.get(hand_code, None)
-        symbol = ACTION_SYMBOLS.get(act, "⬜")
-        # On affiche juste le symbole coloré sur le bouton
-        if cols[j + 1].button(symbol, key=f"{spot_key}_{hand_code}"):
+        acts = hand_actions.get(hand_code, set())
+        if not acts:
+            prefix = EMPTY_EMOJI
+        else:
+            # plusieurs actions possibles -> concat d'emojis
+            prefix = "".join(ACTION_EMOJI[a] for a in sorted(acts) if a in ACTION_EMOJI)
+
+        label = f"{prefix} {hand_code}"  # ex : "🟢🔴 AKo"
+
+        if cols[j + 1].button(label, key=f"{spot_key}_{hand_code}"):
             if st.session_state.current_action == "effacer":
+                # effacer toutes les actions de cette main
                 if hand_code in hand_actions:
                     del hand_actions[hand_code]
             else:
-                hand_actions[hand_code] = st.session_state.current_action
+                # toggle de l'action dans l'ensemble
+                act = st.session_state.current_action
+                s = hand_actions.get(hand_code, set())
+                if act in s:
+                    s.remove(act)
+                else:
+                    s.add(act)
+                if s:
+                    hand_actions[hand_code] = s
+                elif hand_code in hand_actions:
+                    del hand_actions[hand_code]
 
-# On remet le spot modifié dans la session
+# remettre le spot modifié dans la session
 current_spot["hand_actions"] = hand_actions
 st.session_state.spots[spot_key] = current_spot
 
@@ -281,14 +323,21 @@ else:
         scen = spot["scenario"]
         ha = spot.get("hand_actions", {})
         counts = defaultdict(int)
-        for act in ha.values():
-            if act in ACTIONS:
-                counts[act] += 1
+
+        # compter en considérant : mains sans action => fold
+        for h in ALL_HANDS:
+            acts = ha.get(h, set())
+            if not acts:
+                counts["fold"] += 1
+            else:
+                for act in acts:
+                    if act in ACTIONS:
+                        counts[act] += 1
+
         st.markdown(f"**{key}** – {pos}, {stck} BB, scénario `{scen}`")
         st.markdown(
-            f"- {ACTION_SYMBOLS['open']} Open : {counts['open']} mains\n"
-            f"- {ACTION_SYMBOLS['call']} Call : {counts['call']} mains\n"
-            f"- {ACTION_SYMBOLS['threebet']} 3-bet : {counts['threebet']} mains\n"
-            f"- {ACTION_SYMBOLS['fold']} Fold : {counts['fold']} mains"
+            f"- {ACTION_EMOJI['open']} Open : {counts['open']} mains\n"
+            f"- {ACTION_EMOJI['call']} Call : {counts['call']} mains\n"
+            f"- {ACTION_EMOJI['threebet']} 3-bet : {counts['threebet']} mains\n"
+            f"- {ACTION_EMOJI['fold']} Fold : {counts['fold']} mains"
         )
-
