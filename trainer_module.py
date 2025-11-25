@@ -412,14 +412,9 @@ def run_trainer(username: str):
         st.session_state.last_result = None
 
     # =========================================================
-    # Sidebar : logo + options
+    # Sidebar : options (pas de logo ici, c'est géré dans app.py)
     # =========================================================
-    logo_path = os.path.join(base_dir(), "logo-penthievre.jpeg")
-    if os.path.exists(logo_path):
-        st.sidebar.image(logo_path, use_column_width=True)
-
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### Options générales")
+    st.sidebar.markdown("### Options trainer")
 
     table_type = st.sidebar.radio("Format de table", ["6-max", "8-max"])
     mode = st.sidebar.radio("Mode de jeu", ["Libre", "Ranges"])
