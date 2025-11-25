@@ -31,6 +31,7 @@ ACTION_EMOJI = {
     "threebet": "🔴",
     "open_shove": "🟣",       # violet
     "threebet_shove": "⚫",   # noir
+    "fold": "❌"
 }
 EMPTY_EMOJI = "⬜"
 
