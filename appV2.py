@@ -308,7 +308,7 @@ def scenario_pretty_label(scenario: str):
 # Affichage grille de range
 # -----------------------------
 def render_range_grid(spot, highlight_hand=None):
-    """Affiche la range du spot sous forme de grille 13x13 proprement alignée."""
+    """Affiche la range du spot sous forme de grille 13x13, proprement alignée."""
     actions = spot.get("actions", {})
     st.markdown("##### Range de correction")
 
@@ -318,69 +318,60 @@ def render_range_grid(spot, highlight_hand=None):
         for h in hands:
             hand_actions[h].add(act_name)
 
-    def cell_td(hand: str) -> str:
-        acts = hand_actions.get(hand, set())
-
-        # Déterminer le symbole et la couleur
-        if not acts:
-            # Fold par défaut
-            symbol = "✕"
-            color = "#EF4444"  # rouge
-        else:
-            # On donne une "priorité visuelle" aux actions
-            if "open_shove" in acts or "threebet_shove" in acts:
-                color = "#111827"  # noir
-            elif "threebet" in acts:
-                color = "#DC2626"  # rouge foncé
-            elif "open" in acts:
-                color = "#16A34A"  # vert
-            elif "call" in acts:
-                color = "#FACC15"  # jaune
-            else:
-                color = "#6B7280"  # gris
-            symbol = "●"
-
-        highlight_style = ""
-        if highlight_hand is not None and hand == highlight_hand:
-            highlight_style = "background-color:#E5E7EB;border-radius:6px;"
-
-        return f"""
-        <td style="padding:2px 4px;text-align:center;min-width:36px;{highlight_style}">
-          <div style="font-size:11px;line-height:1.1;">
-            <div style="color:{color};font-size:14px;">{symbol}</div>
-            <div>{hand}</div>
-          </div>
-        </td>
-        """
-
-    # Construction du tableau HTML
-    html_parts = [
-        "<div style='overflow-x:auto;'>",
-        "<table style='border-collapse:collapse;font-size:11px;'>",
-        "<thead><tr><th></th>",
-    ]
-
-    # En-têtes colonnes
-    for r in RANKS:
-        html_parts.append(
-            f"<th style='padding:2px 4px;text-align:center;'>{r}</th>"
+    # En-tête colonnes
+    header_cols = st.columns(len(RANKS) + 1)
+    header_cols[0].markdown(" ")
+    for j, r2 in enumerate(RANKS):
+        header_cols[j + 1].markdown(
+            f"<div style='text-align:center;'><b>{r2}</b></div>",
+            unsafe_allow_html=True,
         )
-    html_parts.append("</tr></thead><tbody>")
 
-    # Lignes
+    # Lignes de la grille
     for i, r1 in enumerate(RANKS):
-        html_parts.append("<tr>")
+        cols = st.columns(len(RANKS) + 1)
         # En-tête de ligne
-        html_parts.append(
-            f"<th style='padding:2px 4px;text-align:center;'>{r1}</th>"
+        cols[0].markdown(
+            f"<div style='text-align:center;'><b>{r1}</b></div>",
+            unsafe_allow_html=True,
         )
+
         for j, r2 in enumerate(RANKS):
             hand_code = canonical_hand_from_indices(i, j)
-            html_parts.append(cell_td(hand_code))
-        html_parts.append("</tr>")
+            acts = hand_actions.get(hand_code, set())
 
-    html_parts.append("</tbody></table></div>")
-    st.markdown("".join(html_parts), unsafe_allow_html=True)
+            # --- Choix du symbole + couleur (UN seul symbole par case) ---
+            if not acts:
+                # Fold par défaut
+                symbol = "✕"
+                color = "#EF4444"  # rouge
+            else:
+                # Priorité visuelle pour la couleur
+                if "open_shove" in acts or "threebet_shove" in acts:
+                    color = "#111827"  # noir (shove)
+                elif "threebet" in acts:
+                    color = "#DC2626"  # rouge foncé (3-bet)
+                elif "open" in acts:
+                    color = "#16A34A"  # vert (open)
+                elif "call" in acts:
+                    color = "#FACC15"  # jaune (call)
+                else:
+                    color = "#6B7280"  # gris
+                symbol = "●"
+
+            # Surlignage si c'est la main fautive
+            highlight_style = ""
+            if highlight_hand is not None and hand_code == highlight_hand:
+                highlight_style = "background-color:#E5E7EB;border-radius:6px;"
+
+            cell_html = f"""
+            <div style="font-size:11px;line-height:1.1;text-align:center;{highlight_style}">
+              <span style="color:{color};font-size:14px;">{symbol}</span><br>
+              <span>{hand_code}</span>
+            </div>
+            """
+
+            cols[j + 1].markdown(cell_html, unsafe_allow_html=True)
 
 
 # -----------------------------
