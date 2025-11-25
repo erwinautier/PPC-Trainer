@@ -308,44 +308,79 @@ def scenario_pretty_label(scenario: str):
 # Affichage grille de range
 # -----------------------------
 def render_range_grid(spot, highlight_hand=None):
+    """Affiche la range du spot sous forme de grille 13x13 proprement alignée."""
     actions = spot.get("actions", {})
     st.markdown("##### Range de correction")
 
+    # main -> set(actions)
     hand_actions = defaultdict(set)
     for act_name, hands in actions.items():
         for h in hands:
             hand_actions[h].add(act_name)
 
-    header_cols = st.columns(len(RANKS) + 1)
-    header_cols[0].markdown(" ")
-    for j, r2 in enumerate(RANKS):
-        header_cols[j + 1].markdown(
-            f"<div style='text-align:center;'><b>{r2}</b></div>",
-            unsafe_allow_html=True,
-        )
+    def cell_td(hand: str) -> str:
+        acts = hand_actions.get(hand, set())
 
+        # Déterminer le symbole et la couleur
+        if not acts:
+            # Fold par défaut
+            symbol = "✕"
+            color = "#EF4444"  # rouge
+        else:
+            # On donne une "priorité visuelle" aux actions
+            if "open_shove" in acts or "threebet_shove" in acts:
+                color = "#111827"  # noir
+            elif "threebet" in acts:
+                color = "#DC2626"  # rouge foncé
+            elif "open" in acts:
+                color = "#16A34A"  # vert
+            elif "call" in acts:
+                color = "#FACC15"  # jaune
+            else:
+                color = "#6B7280"  # gris
+            symbol = "●"
+
+        highlight_style = ""
+        if highlight_hand is not None and hand == highlight_hand:
+            highlight_style = "background-color:#E5E7EB;border-radius:6px;"
+
+        return f"""
+        <td style="padding:2px 4px;text-align:center;min-width:36px;{highlight_style}">
+          <div style="font-size:11px;line-height:1.1;">
+            <div style="color:{color};font-size:14px;">{symbol}</div>
+            <div>{hand}</div>
+          </div>
+        </td>
+        """
+
+    # Construction du tableau HTML
+    html_parts = [
+        "<div style='overflow-x:auto;'>",
+        "<table style='border-collapse:collapse;font-size:11px;'>",
+        "<thead><tr><th></th>",
+    ]
+
+    # En-têtes colonnes
+    for r in RANKS:
+        html_parts.append(
+            f"<th style='padding:2px 4px;text-align:center;'>{r}</th>"
+        )
+    html_parts.append("</tr></thead><tbody>")
+
+    # Lignes
     for i, r1 in enumerate(RANKS):
-        cols = st.columns(len(RANKS) + 1)
-        cols[0].markdown(
-            f"<div style='text-align:center;'><b>{r1}</b></div>",
-            unsafe_allow_html=True,
+        html_parts.append("<tr>")
+        # En-tête de ligne
+        html_parts.append(
+            f"<th style='padding:2px 4px;text-align:center;'>{r1}</th>"
         )
         for j, r2 in enumerate(RANKS):
             hand_code = canonical_hand_from_indices(i, j)
-            acts = hand_actions.get(hand_code, set())
-            if not acts:
-                prefix = "⬜"
-            else:
-                prefix = "".join(
-                    ACTION_EMOJI[a] for a in sorted(acts) if a in ACTION_EMOJI
-                )
-            label = f"{prefix} {hand_code}"
-            if highlight_hand is not None and hand_code == highlight_hand:
-                label = f"👉 {label}"
-            cols[j + 1].markdown(
-                f"<div style='font-size:11px;text-align:center;'>{label}</div>",
-                unsafe_allow_html=True,
-            )
+            html_parts.append(cell_td(hand_code))
+        html_parts.append("</tr>")
+
+    html_parts.append("</tbody></table></div>")
+    st.markdown("".join(html_parts), unsafe_allow_html=True)
 
 
 # -----------------------------
