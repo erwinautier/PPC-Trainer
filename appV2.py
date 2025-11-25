@@ -476,17 +476,32 @@ if mode_jeu == "Libre (sans ranges)":
     )
     selected_stack = None if stack_favori == "Aucun" else int(stack_favori)
 
-# Fichier de ranges (mode correction)
+# ---------------------------------------
+# Sélecteur de fichier ranges (mode ranges)
+# ---------------------------------------
+ranges_file = None  # ← on initialise en dehors du if principal
+
+if mode_jeu == "Avec ranges de correction":
+    st.sidebar.markdown("### Fichier de ranges (.json)")
+    ranges_file = st.sidebar.file_uploader(
+        "Charger un fichier de ranges (JSON exporté du range_editor)",
+        type=["json"]
+    )
+
+# ---------------------------------------
+# Chargement en mémoire si un fichier est fourni
+# ---------------------------------------
 if mode_jeu == "Avec ranges de correction":
     if ranges_file is not None:
-        # On (re)charge les ranges UNIQUEMENT si un fichier est fourni
+        # On charge une seule fois en session (ne s'efface pas au re-run)
         ranges_data = load_ranges_from_json_file(ranges_file)
         st.session_state.ranges_data = ranges_data
         st.session_state.range_spot_keys = list(ranges_data.keys())
+    # Surtout : on NE vide PAS ranges_data quand ranges_file vaut None !
 else:
-    # Si on repasse en mode libre, on peut vider les ranges
     st.session_state.ranges_data = {}
     st.session_state.range_spot_keys = []
+
 
 
 # Reset profil (mode libre)
