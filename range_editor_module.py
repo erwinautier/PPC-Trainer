@@ -1,40 +1,30 @@
-# ranges_editor.py
 import os
+import sys
 import json
 from collections import defaultdict
 
+
+import streamlit as st
 import streamlit as st
 
-# -----------------------------
-# Constantes poker
-# -----------------------------
+# ─────────────────────────────────────────────────────────
+# Constantes communes (à adapter comme dans ton range_editor)
+# ─────────────────────────────────────────────────────────
 RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
 
-# Positions pour chaque format
-POSITIONS_6MAX = ["LJ", "HJ", "CO", "BTN", "SB", "BB"]
-POSITIONS_8MAX = ["UTG", "UTG+1", "LJ", "HJ", "CO", "BTN", "SB", "BB"]
+def base_dir():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
-STACKS = [100, 50, 25, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10]
+def user_ranges_path(username: str) -> str:
+    """Fichier de ranges perso (mêmes conventions que le Trainer)."""
+    safe = "".join(c for c in username if c.isalnum() or c in ("_", "-"))
+    return os.path.join(base_dir(), f"ranges_{safe}.json")
 
-# Actions (hors fold qui reste implicite)
-ACTIONS = ["open", "call", "threebet", "open_shove", "threebet_shove"]
-ACTION_LABELS = {
-    "open": "Open",
-    "call": "Call",
-    "threebet": "3-bet",
-    "open_shove": "Open shove",
-    "threebet_shove": "3-bet shove",
-}
-ACTION_EMOJI = {
-    "open": "🟢",
-    "call": "🟡",
-    "threebet": "🔴",
-    "open_shove": "🟣",
-    "threebet_shove": "⚫",
-    "fold": "❌",  # pour l'affichage des stats
-}
-EMPTY_EMOJI = "⬜"
-
+def default_ranges_path() -> str:
+    """Fichier de ranges par défaut global."""
+    return os.path.join(base_dir(), "default_ranges.json")
 
 # -----------------------------
 # Utilitaires
@@ -101,6 +91,61 @@ def all_hands_set():
 ALL_HANDS = all_hands_set()
 
 
+# ─────────────────────────────────────────────────────────--------------------------------------------------------------------
+#  FONCTION PRINCIPALE APPELÉE PAR app.py
+# ─────────────────────────────────────────────────────────
+def run_range_editor(username: str):
+    """
+    Module d'édition de ranges.
+    Tu colles ici le contenu de ton ancien range_editor.py,
+    en l'adaptant légèrement (voir les étapes ci-dessous).
+    """
+
+    # Petit bandeau d’info en haut
+    st.markdown(f"*Éditeur de ranges – profil **{username}***")
+    st.markdown("---")
+
+    # À PARTIR D’ICI : COLLER ET ADAPTER TON ANCIEN CODE
+    # (voir étapes suivantes)
+
+
+#----------------------------------------------------------------------------------------------------------------------------
+# ranges_editor.py
+
+
+# -----------------------------
+# Constantes poker
+# -----------------------------
+RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
+
+# Positions pour chaque format
+POSITIONS_6MAX = ["LJ", "HJ", "CO", "BTN", "SB", "BB"]
+POSITIONS_8MAX = ["UTG", "UTG+1", "LJ", "HJ", "CO", "BTN", "SB", "BB"]
+
+STACKS = [100, 50, 25, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10]
+
+# Actions (hors fold qui reste implicite)
+ACTIONS = ["open", "call", "threebet", "open_shove", "threebet_shove"]
+ACTION_LABELS = {
+    "open": "Open",
+    "call": "Call",
+    "threebet": "3-bet",
+    "open_shove": "Open shove",
+    "threebet_shove": "3-bet shove",
+}
+ACTION_EMOJI = {
+    "open": "🟢",
+    "call": "🟡",
+    "threebet": "🔴",
+    "open_shove": "🟣",
+    "threebet_shove": "⚫",
+    "fold": "❌",  # pour l'affichage des stats
+}
+EMPTY_EMOJI = "⬜"
+
+
+
+
 # -----------------------------
 # Callback pour un clic sur une main
 # -----------------------------
@@ -148,12 +193,12 @@ def update_hand_action(spot_key: str, hand_code: str):
 
 # -----------------------------
 # Config Streamlit
-# -----------------------------
-st.set_page_config(
-    page_title="Éditeur de ranges (grille)",
-    page_icon="🧮",
-    layout="wide",
-)
+# ----------------------------- ----------------------------------------------------------------------------------------------------------------------
+#st.set_page_config(
+#    page_title="Éditeur de ranges (grille)",
+#    page_icon="🧮",
+#    layout="wide",
+#)
 
 st.title("🧮 Éditeur de ranges préflop – mode grille cliquable")
 
