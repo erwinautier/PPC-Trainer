@@ -36,7 +36,7 @@ ACTION_LABELS = {
     "threebet_shove": "3-bet shove",
 }
 ACTION_EMOJI = {
-    "fold": "⚪",      # point blanc pour fold
+    "fold": "⚪",
     "call": "🟡",
     "open": "🟢",
     "threebet": "🔴",
@@ -46,7 +46,7 @@ ACTION_EMOJI = {
 
 
 # =========================================================
-# Fonctions utilitaires générales
+# Fonctions utilitaires
 # =========================================================
 def base_dir():
     """Dossier de base de l'application (utile aussi en exécutable)."""
@@ -264,7 +264,7 @@ def get_correct_actions_for_hand(spot_def, hand_code):
 
 
 def render_range_grid(spot_def, highlight_hand=None):
-    """Affiche la range sous forme de tableau HTML très compact (mobile-friendly)."""
+    """Affiche la range sous forme de tableau HTML compact (mobile-friendly)."""
     actions = spot_def.get("actions", {})
 
     st.markdown("##### Range de correction")
@@ -281,13 +281,11 @@ def render_range_grid(spot_def, highlight_hand=None):
 
     html_parts = []
 
-    # Conteneur scrollable (horizontal)
     html_parts.append(
         "<div style='overflow-x:auto; max-width:100%; "
         "border:1px solid #e5e7eb; border-radius:8px; "
-        "padding:4px; background-color:#0b1120;'>"
+        "padding:4px; background-color:#fafafa;'>"
     )
-    # min-width réduite : tient sur téléphone
     html_parts.append(
         "<table style='border-collapse:collapse; font-size:9px; min-width:260px;'>"
     )
@@ -297,17 +295,16 @@ def render_range_grid(spot_def, highlight_hand=None):
     html_parts.append("<th style='padding:2px; text-align:center;'></th>")
     for r2 in RANKS:
         html_parts.append(
-            f"<th style='padding:2px; text-align:center;color:#e5e7eb;'>{r2}</th>"
+            f"<th style='padding:2px; text-align:center;'>{r2}</th>"
         )
     html_parts.append("</tr></thead>")
 
-    # Corps du tableau
+    # Corps
     html_parts.append("<tbody>")
     for i, r1 in enumerate(RANKS):
         html_parts.append("<tr>")
-        # Tête de ligne (rang)
         html_parts.append(
-            f"<th style='padding:2px; text-align:center;color:#e5e7eb;'>{r1}</th>"
+            f"<th style='padding:2px; text-align:center;'>{r1}</th>"
         )
 
         for j, r2 in enumerate(RANKS):
@@ -320,20 +317,19 @@ def render_range_grid(spot_def, highlight_hand=None):
             else:
                 border = "none"
                 if "open_shove" in acts or "threebet_shove" in acts:
-                    color = "#111827"      # shove = noir
+                    color = "#111827"
                 elif "threebet" in acts:
-                    color = "#DC2626"      # 3-bet = rouge
+                    color = "#DC2626"
                 elif "open" in acts:
-                    color = "#16A34A"      # open = vert
+                    color = "#16A34A"
                 elif "call" in acts:
-                    color = "#FACC15"      # call = jaune
+                    color = "#FACC15"
                 else:
-                    color = "#6B7280"      # autre = gris
+                    color = "#6B7280"
 
-            # Surlignage de la main fautive (fond de la cellule)
             highlight_style = ""
             if highlight_hand is not None and hand == highlight_hand:
-                highlight_style = "background-color:#1f2937; border-radius:4px;"
+                highlight_style = "background-color:#E5E7EB; border-radius:4px;"
 
             cell_html = f"""
             <td style="padding:1px; text-align:center; {highlight_style}">
@@ -357,7 +353,7 @@ def render_range_grid(spot_def, highlight_hand=None):
 
 
 # =========================================================
-# Initialisation des états Streamlit
+# États Streamlit
 # =========================================================
 if "user" not in st.session_state:
     st.session_state.user = None
@@ -372,10 +368,10 @@ if "ranges_data" not in st.session_state:
     st.session_state.ranges_data = {}
 
 if "current_spot" not in st.session_state:
-    st.session_state.current_spot = None  # dict avec infos du spot actuel
+    st.session_state.current_spot = None
 
 if "current_mode" not in st.session_state:
-    st.session_state.current_mode = None  # "Libre" ou "Ranges"
+    st.session_state.current_mode = None
 
 if "range_stats" not in st.session_state:
     st.session_state.range_stats = {
@@ -406,7 +402,6 @@ if os.path.exists(logo_full):
 
 st.sidebar.markdown("---")
 
-# Authentification
 if st.session_state.user:
     st.sidebar.markdown(f"### Connecté : `{st.session_state.user}`")
     if st.sidebar.button("Se déconnecter"):
@@ -435,12 +430,10 @@ username = st.session_state.user
 leitner = load_leitner(username)
 
 # =========================================================
-# Sidebar : options générales + thème
+# Sidebar : options générales
 # =========================================================
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Options générales")
-
-theme = st.sidebar.radio("Thème", ["Clair", "Sombre"], index=0)
 
 table_type = st.sidebar.radio("Format de table", ["6-max", "8-max"])
 mode = st.sidebar.radio("Mode de jeu", ["Libre", "Ranges"])
@@ -453,40 +446,7 @@ if mode == "Libre":
     )
     selected_stack = None if fav == "Aucun" else int(fav)
 
-# Thème global (clair / sombre)
-if theme == "Sombre":
-    st.markdown("""
-    <style>
-    [data-testid="stAppViewContainer"] {
-        background-color: #020617;
-        color: #e5e7eb;
-    }
-    [data-testid="stHeader"] {background-color: rgba(15,23,42,0.8);}
-    [data-testid="stSidebar"] {
-        background-color: #020617;
-        color: #e5e7eb;
-    }
-    .stMarkdown, .stText, .stSubheader, .stHeader, .stTitle {
-        color: #e5e7eb;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-else:
-    st.markdown("""
-    <style>
-    [data-testid="stAppViewContainer"] {
-        background-color: #f9fafb;
-        color: #111827;
-    }
-    [data-testid="stHeader"] {background-color: rgba(249,250,251,0.9);}
-    [data-testid="stSidebar"] {
-        background-color: #f9fafb;
-        color: #111827;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-# Gestion des ranges (défaut / perso + upload)
+# Gestion ranges en mode "Ranges"
 if mode == "Ranges":
     st.sidebar.markdown("### Source des ranges")
 
@@ -495,7 +455,6 @@ if mode == "Ranges":
         options=["Ranges par défaut", "Ranges perso"],
     )
 
-    # On pré-charge les fichiers sur disque si possible
     user_path = user_ranges_path(username)
     default_path = default_ranges_path()
 
@@ -512,11 +471,9 @@ if mode == "Ranges":
         key="ranges_file_uploader",
     )
 
-    # Si l'utilisateur importe un fichier -> on l'enregistre comme ranges perso
     if ranges_file is not None:
         spots = load_ranges_from_filelike(ranges_file)
         if spots:
-            # On sauvegarde en dur pour ce profil
             try:
                 ranges_file.seek(0)
                 content = ranges_file.getvalue()
@@ -529,7 +486,7 @@ if mode == "Ranges":
         else:
             st.sidebar.error("Fichier de ranges invalide (clé 'spots' manquante ou incorrecte).")
 
-    # Choix effectif des ranges à utiliser (avec fallback)
+    # Choix effectif avec fallback
     active_ranges = {}
     if ranges_source == "Ranges perso":
         if st.session_state.ranges_personal:
@@ -540,7 +497,7 @@ if mode == "Ranges":
                 active_ranges = st.session_state.ranges_default
             else:
                 active_ranges = {}
-    else:  # Ranges par défaut
+    else:
         if st.session_state.ranges_default:
             active_ranges = st.session_state.ranges_default
         elif st.session_state.ranges_personal:
@@ -550,12 +507,11 @@ if mode == "Ranges":
             active_ranges = {}
 
     st.session_state.ranges_data = active_ranges
-
 else:
     ranges_source = None
     ranges_file = None
 
-# Reset Leitner (mode libre)
+# Reset Leitner
 if st.sidebar.button("♻️ Reset profil (mode libre)"):
     leitner = {"weights": {}, "stats": {"good": 0, "bad": 0}}
     save_leitner(username, leitner)
@@ -563,7 +519,7 @@ if st.sidebar.button("♻️ Reset profil (mode libre)"):
 
 
 # =========================================================
-# Gestion changement de mode
+# Changement de mode
 # =========================================================
 if st.session_state.current_mode != mode:
     st.session_state.current_mode = mode
@@ -576,10 +532,9 @@ if st.session_state.current_mode != mode:
 # Fonctions de tirage de spots
 # =========================================================
 def new_free_spot():
-    """Crée un nouveau spot pour le mode libre (Leitner)."""
+    """Crée un nouveau spot pour le mode libre."""
     positions = POSITIONS_6MAX if table_type == "6-max" else POSITIONS_8MAX
 
-    # 50% Leitner pondéré, 50% stack favori
     if random.random() < 0.5:
         pos, stack = weighted_position_stack_choice(leitner, positions)
     else:
@@ -610,7 +565,7 @@ def new_free_spot():
 
 
 def new_range_spot():
-    """Crée un nouveau spot pour le mode ranges (en s'appuyant sur ranges_data)."""
+    """Crée un nouveau spot pour le mode ranges."""
     ranges_data = st.session_state.ranges_data
     if not ranges_data:
         return None
@@ -650,7 +605,7 @@ def new_range_spot():
 
 
 # =========================================================
-# UI principale : titre + conteneurs
+# UI principale
 # =========================================================
 st.title("🃏 Poker Trainer – Ranges & Leitner")
 st.markdown(f"*Profil : **{username}***")
@@ -660,106 +615,137 @@ info_container = st.empty()
 
 st.markdown("---")
 
-# =========================================================
-# CSS / Animation pour les boutons poker
-# =========================================================
-st.markdown("""
-<style>
-.poker-btn {
-    font-weight: 600;
-    border-radius: 999px;
-    height: 50px;
-    font-size: 16px;
-    transition: transform 0.07s ease, box-shadow 0.07s ease, filter 0.07s ease;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-}
-.poker-btn:active {
-    transform: scale(0.96);
-    box-shadow: 0 0 0 rgba(0,0,0,0);
-    filter: brightness(0.95);
-}
-</style>
-""", unsafe_allow_html=True)
+# Si pas de spot courant, en créer un
+if st.session_state.current_spot is None:
+    if mode == "Libre":
+        st.session_state.current_spot = new_free_spot()
+    else:
+        st.session_state.current_spot = new_range_spot()
 
-# script pour colorer les boutons par leur texte (Bonne / Mauvaise / Nouvelle main)
-st.markdown("""
-<script>
-function stylePokerButtons() {
-  const buttons = window.parent.document.querySelectorAll('button');
-  buttons.forEach((btn) => {
-    const txt = btn.innerText || "";
-    if (txt.includes("Bonne réponse")) {
-      btn.style.backgroundColor = "#16A34A";
-      btn.style.color = "white";
-      btn.classList.add("poker-btn");
-    } else if (txt.includes("Mauvaise réponse")) {
-      btn.style.backgroundColor = "#DC2626";
-      btn.style.color = "white";
-      btn.classList.add("poker-btn");
-    } else if (txt.includes("Nouvelle main")) {
-      btn.style.backgroundColor = "#2563EB";
-      btn.style.color = "white";
-      btn.classList.add("poker-btn");
-    }
-  });
-}
-
-setTimeout(stylePokerButtons, 500);
-</script>
-""", unsafe_allow_html=True)
-
-# =========================================================
-# Gestion des boutons AVANT affichage du spot
-# =========================================================
-need_new_spot = False
 spot = st.session_state.current_spot
 
-if mode == "Libre":
-    # Boutons avec icônes poker + code couleur
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        clicked_good = st.button("✅♠ Bonne réponse", key="good_btn", use_container_width=True)
-    with col2:
-        clicked_bad = st.button("❌♥ Mauvaise réponse", key="bad_btn", use_container_width=True)
-    with col3:
-        clicked_new = st.button("🔄🃏 Nouvelle main", key="new_free_btn", use_container_width=True)
-
-    if clicked_good and spot and spot["mode"] == "Libre":
-        leitner["stats"]["good"] += 1
-        update_weight(leitner, spot["position"], spot["stack"], factor=0.8)
-        save_leitner(username, leitner)
-        need_new_spot = True
-
-    elif clicked_bad and spot and spot["mode"] == "Libre":
-        leitner["stats"]["bad"] += 1
-        update_weight(leitner, spot["position"], spot["stack"], factor=1.5)
-        save_leitner(username, leitner)
-        need_new_spot = True
-
-    elif clicked_new:
-        need_new_spot = True
-
+if not spot:
+    st.warning("Impossible de générer un spot (vérifie les ranges en mode Ranges).")
 else:
-    # Mode Ranges : boutons d'action + nouvelle main
-    st.markdown("### Que fais-tu dans ce spot ?")
-    colA1, colA2, colA3 = st.columns(3)
-    colB1, colB2, colB3 = st.columns(3)
+    pos = spot["position"]
+    stack = spot["stack"]
+    c1, c2 = spot["cards"]
+    hand_code = spot["hand_code"]
 
-    actions_clicked = {
-        "fold": colA1.button(f"{ACTION_EMOJI['fold']} Fold"),
-        "call": colA2.button(f"{ACTION_EMOJI['call']} Call"),
-        "open": colA3.button(f"{ACTION_EMOJI['open']} Open"),
-        "threebet": colB1.button(f"{ACTION_EMOJI['threebet']} 3-bet"),
-        "open_shove": colB2.button(f"{ACTION_EMOJI['open_shove']} Open shove"),
-        "threebet_shove": colB3.button(
-            f"{ACTION_EMOJI['threebet_shove']} 3-bet shove"
-        ),
-    }
+    def colorize(card):
+        suit = card[-1]
+        color = "#DC2626" if suit in {"♥", "♦"} else "#111827"
+        return f"<span style='color:{color}'>{card}</span>"
 
-    clicked_new_range = st.button("🔄🃏 Nouvelle main (ranges)", key="new_range_btn")
+    hand_html = f"{colorize(c1)}&nbsp;&nbsp;{colorize(c2)}"
+    scenario_label = spot.get("scenario_label", "")
+    extra_text = spot.get("extra", "")
 
-    if spot and spot["mode"] == "Ranges":
-        # Évaluation de la réponse sur le spot courant (pas de tirage ici)
+    card_html = f"""
+    <div style="
+        background-color:#f5f5f5;
+        border-radius:18px;
+        padding:18px 22px;
+        margin-bottom:6px;
+        border:1px solid #e5e7eb;">
+      <div style="display:flex;justify-content:space-between;gap:16px;">
+        <div style="flex:1;text-align:center;">
+          <div style="font-size:12px;color:#666;">Position</div>
+          <div style="font-size:32px;font-weight:bold;">{pos}</div>
+        </div>
+        <div style="flex:1;text-align:center;">
+          <div style="font-size:12px;color:#666;">Stack (BB)</div>
+          <div style="font-size:32px;font-weight:bold;">{stack}</div>
+        </div>
+      </div>
+      <div style="margin-top:14px;text-align:center;">
+        <div style="font-size:12px;color:#666;">Main</div>
+        <div style="font-size:32px;font-weight:bold;">{hand_html}</div>
+      </div>
+    </div>
+    """
+    card_container.markdown(card_html, unsafe_allow_html=True)
+
+    # ===== Scénario : plus gros =====
+    info_html = ""
+    if extra_text:
+        info_html += f"<div style='font-size:14px;margin-bottom:2px;'>{extra_text}</div>"
+    if scenario_label:
+        info_html += (
+            f"<div style='font-size:18px;font-weight:bold;margin-bottom:4px;'>"
+            f"Scénario : {scenario_label}</div>"
+        )
+    if mode == "Ranges":
+        info_html += (
+            f"<div style='font-size:12px;color:#666;'>Spot : "
+            f"<code>{spot['spot_key']}</code></div>"
+        )
+
+    if info_html:
+        info_container.markdown(info_html, unsafe_allow_html=True)
+
+# =========================================================
+# Boutons & logique
+# =========================================================
+if spot:
+    # MODE LIBRE : boutons dessous (comme avant)
+    if mode == "Libre":
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            clicked_good = st.button("✅ Bonne réponse")
+        with col2:
+            clicked_bad = st.button("❌ Mauvaise réponse")
+        with col3:
+            clicked_new = st.button("🔄 Nouvelle donne")
+
+        if clicked_good:
+            leitner["stats"]["good"] += 1
+            update_weight(leitner, spot["position"], spot["stack"], factor=0.8)
+            save_leitner(username, leitner)
+            st.session_state.current_spot = new_free_spot()
+            st.session_state.show_correction = False
+            st.session_state.last_result = None
+            st.experimental_rerun()
+
+        if clicked_bad:
+            leitner["stats"]["bad"] += 1
+            update_weight(leitner, spot["position"], spot["stack"], factor=1.5)
+            save_leitner(username, leitner)
+            st.session_state.current_spot = new_free_spot()
+            st.session_state.show_correction = False
+            st.session_state.last_result = None
+            st.experimental_rerun()
+
+        if clicked_new:
+            st.session_state.current_spot = new_free_spot()
+            st.session_state.show_correction = False
+            st.session_state.last_result = None
+            st.experimental_rerun()
+
+    else:
+        # MODE RANGES :
+        # 1) Bouton "Nouvelle main" centré sous le scénario
+        col_left, col_center, col_right = st.columns([1, 2, 1])
+        with col_center:
+            clicked_new_range = st.button("🔄 Nouvelle main")
+
+        # 2) Boutons d'action en dessous
+        st.markdown("### Que fais-tu dans ce spot ?")
+        colA1, colA2, colA3 = st.columns(3)
+        colB1, colB2, colB3 = st.columns(3)
+
+        actions_clicked = {
+            "fold": colA1.button(f"{ACTION_EMOJI['fold']} Fold"),
+            "call": colA2.button(f"{ACTION_EMOJI['call']} Call"),
+            "open": colA3.button(f"{ACTION_EMOJI['open']} Open"),
+            "threebet": colB1.button(f"{ACTION_EMOJI['threebet']} 3-bet"),
+            "open_shove": colB2.button(f"{ACTION_EMOJI['open_shove']} Open shove"),
+            "threebet_shove": colB3.button(
+                f"{ACTION_EMOJI['threebet_shove']} 3-bet shove"
+            ),
+        }
+
+        # Évaluation des actions
         for act_key, pressed in actions_clicked.items():
             if pressed:
                 rs = st.session_state.range_stats
@@ -786,100 +772,17 @@ else:
                 st.session_state.range_stats = rs
                 break
 
-    if clicked_new_range:
-        need_new_spot = True
-        st.session_state.show_correction = False
-        st.session_state.last_result = None
-
-# =========================================================
-# Création / renouvellement de spot si nécessaire
-# =========================================================
-if st.session_state.current_spot is None or need_new_spot:
-    if mode == "Libre":
-        st.session_state.current_spot = new_free_spot()
-        st.session_state.show_correction = False
-        st.session_state.last_result = None
-    else:
-        new_spot = new_range_spot()
-        if new_spot is not None:
-            st.session_state.current_spot = new_spot
+        # Nouvelle main
+        if clicked_new_range:
+            st.session_state.current_spot = new_range_spot()
             st.session_state.show_correction = False
             st.session_state.last_result = None
-
-spot = st.session_state.current_spot
-
-# =========================================================
-# Affichage du spot
-# =========================================================
-if not spot:
-    st.warning("Impossible de générer un spot (vérifie les ranges en mode Ranges).")
-else:
-    pos = spot["position"]
-    stack = spot["stack"]
-    c1, c2 = spot["cards"]
-    hand_code = spot["hand_code"]
-
-    def colorize(card):
-        suit = card[-1]
-        if suit in {"♥", "♦"}:
-            color = "#F97373" if theme == "Sombre" else "#DC2626"
-        else:
-            color = "#E5E7EB" if theme == "Sombre" else "#111827"
-        return f"<span style='color:{color}'>{card}</span>"
-
-    hand_html = f"{colorize(c1)}&nbsp;&nbsp;{colorize(c2)}"
-    scenario_label = spot.get("scenario_label", "")
-    extra_text = spot.get("extra", "")
-
-    if theme == "Sombre":
-        card_bg = "#020617"
-        border_color = "#1e293b"
-        label_color = "#9ca3af"
-    else:
-        card_bg = "#f5f5f5"
-        border_color = "#e5e7eb"
-        label_color = "#6b7280"
-
-    card_html = f"""
-    <div style="
-        background-color:{card_bg};
-        border-radius:18px;
-        padding:18px 22px;
-        margin-bottom:6px;
-        border:1px solid {border_color};">
-      <div style="display:flex;justify-content:space-between;gap:16px;">
-        <div style="flex:1;text-align:center;">
-          <div style="font-size:12px;color:{label_color};">Position</div>
-          <div style="font-size:32px;font-weight:bold;">{pos}</div>
-        </div>
-        <div style="flex:1;text-align:center;">
-          <div style="font-size:12px;color:{label_color};">Stack (BB)</div>
-          <div style="font-size:32px;font-weight:bold;">{stack}</div>
-        </div>
-      </div>
-      <div style="margin-top:14px;text-align:center;">
-        <div style="font-size:12px;color:{label_color};">Main</div>
-        <div style="font-size:32px;font-weight:bold;">{hand_html}</div>
-      </div>
-    </div>
-    """
-    card_container.markdown(card_html, unsafe_allow_html=True)
-
-    info_lines = []
-    if extra_text:
-        info_lines.append(extra_text)
-    if scenario_label:
-        info_lines.append(f"Scénario : {scenario_label}")
-    if mode == "Ranges":
-        info_lines.append(f"Spot : `{spot['spot_key']}`")
-
-    if info_lines:
-        info_container.markdown("<br>".join(info_lines))
+            st.experimental_rerun()
 
 # =========================================================
 # Feedback / correction (mode ranges)
 # =========================================================
-if mode == "Ranges":
+if mode == "Ranges" and spot:
     if st.session_state.last_result == "good":
         st.success("Bonne réponse ✅")
     elif st.session_state.last_result == "bad":
