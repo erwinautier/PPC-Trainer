@@ -389,7 +389,7 @@ st.set_page_config(
 if "user" not in st.session_state:
     st.session_state.user = None
 
-logo_path = "logo_penthievre.png"
+logo_path = "logo-penthievre.jpeg"
 logo_full_path = os.path.join(base_dir(), logo_path)
 if os.path.exists(logo_full_path):
     st.sidebar.image(logo_full_path, use_column_width=True)
