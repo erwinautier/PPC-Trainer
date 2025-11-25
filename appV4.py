@@ -705,7 +705,7 @@ if spot:
             st.session_state.current_spot = new_free_spot()
             st.session_state.show_correction = False
             st.session_state.last_result = None
-            st.experimental_rerun()
+            st.rerun()
 
         if clicked_bad:
             leitner["stats"]["bad"] += 1
@@ -714,13 +714,13 @@ if spot:
             st.session_state.current_spot = new_free_spot()
             st.session_state.show_correction = False
             st.session_state.last_result = None
-            st.experimental_rerun()
+            st.rerun()
 
         if clicked_new:
             st.session_state.current_spot = new_free_spot()
             st.session_state.show_correction = False
             st.session_state.last_result = None
-            st.experimental_rerun()
+            st.rerun()
 
     else:
         # MODE RANGES :
@@ -777,7 +777,7 @@ if spot:
             st.session_state.current_spot = new_range_spot()
             st.session_state.show_correction = False
             st.session_state.last_result = None
-            st.experimental_rerun()
+            st.rerun()
 
 # =========================================================
 # Feedback / correction (mode ranges)
