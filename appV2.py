@@ -37,13 +37,15 @@ ACTION_EMOJI = {
     "threebet_shove": "⚫",
 }
 
-
+# -----------------------------
+# Utils cartes / mains
+# -----------------------------
 def build_deck():
     return [f"{r}{s}" for r in RANKS for s in SUITS]
 
 
 def canonical_from_cards(card1: str, card2: str) -> str:
-    """Convertit 2 cartes (ex: As♠, Kd♦) en code type AA, AKs, AKo."""
+    """Convertit 2 cartes (ex: A♠, K♦) en code type AA, AKs, AKo."""
     r1, s1 = card1[0], card1[1]
     r2, s2 = card2[0], card2[1]
     if r1 == r2:
@@ -57,11 +59,29 @@ def canonical_from_cards(card1: str, card2: str) -> str:
     return hi + lo + ("s" if suited else "o")
 
 
+def canonical_hand_from_indices(i: int, j: int) -> str:
+    """Pour afficher une grille de range (suited en haut, off en bas)."""
+    r1 = RANKS[i]
+    r2 = RANKS[j]
+    if i == j:
+        return r1 + r2
+    idx1 = RANKS.index(r1)
+    idx2 = RANKS.index(r2)
+    if idx1 < idx2:
+        hi, lo = r1, r2
+    else:
+        hi, lo = r2, r1
+    if i < j:
+        return hi + lo + "s"
+    else:
+        return hi + lo + "o"
+
+
 # -----------------------------
-# Gestion des chemins & fichiers
+# Gestion chemins / fichiers
 # -----------------------------
 def base_dir():
-    if getattr(sys, "frozen", False):
+    if getattr(sys, "frozen", False):  # pour un éventuel exécutable
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
@@ -80,7 +100,7 @@ def get_save_path(username: str) -> str:
 
 
 # -----------------------------
-# Gestion des utilisateurs (id + mdp)
+# Gestion utilisateurs
 # -----------------------------
 def load_users():
     if os.path.exists(USERS_FILE):
@@ -125,7 +145,7 @@ def check_login(username: str, password: str) -> bool:
 
 
 # -----------------------------
-# Sauvegarde des stats / poids (mode libre)
+# Sauvegarde stats / poids (mode libre)
 # -----------------------------
 def load_data(username: str):
     weights = defaultdict(lambda: 1.0)
@@ -159,7 +179,7 @@ def save_data(username: str, weights, stats):
 
 
 # -----------------------------
-# Logique de tirage (mode libre)
+# Tirages (mode libre)
 # -----------------------------
 def weighted_stack_choice(selected_stack):
     if selected_stack is not None and random.random() < 0.5:
@@ -173,7 +193,6 @@ def weighted_stack_choice(selected_stack):
 
 def weighted_position_stack_choice(weights, available_positions):
     all_cases = [(p, s) for p in available_positions for s in STACKS]
-    # on ne garde que les cases présentes dans weights ou on initialise à 1
     effective_weights = {}
     for p, s in all_cases:
         effective_weights[(p, s)] = weights.get((p, s), 1.0)
@@ -190,7 +209,6 @@ def weighted_position_stack_choice(weights, available_positions):
 def roll_free(weights, selected_stack, table_type):
     positions = POSITIONS_6MAX if table_type == "6-max" else POSITIONS_8MAX
 
-    # moitié du temps: pondéré par Leitner, moitié: stack forcé
     if random.random() < 0.5:
         pos, stack = weighted_position_stack_choice(weights, positions)
     else:
@@ -208,7 +226,6 @@ def roll_free(weights, selected_stack, table_type):
 
     hand_html = f"{colorize(c1)}&nbsp;&nbsp;{colorize(c2)}"
 
-    # On garde un scénario simplifié pour le mode libre
     extra = ""
     scenario_label = "Open"
 
@@ -221,7 +238,7 @@ def roll_free(weights, selected_stack, table_type):
 
 
 # -----------------------------
-# Chargement des ranges JSON (mode correction)
+# Ranges JSON (mode correction)
 # -----------------------------
 def load_ranges_from_json_file(file):
     try:
@@ -237,7 +254,6 @@ def load_ranges_from_json_file(file):
         scen = spot.get("scenario", "open")
         actions = spot.get("actions", {})
 
-        # normaliser
         cleaned = {
             "table_type": table_type,
             "position": pos,
@@ -252,7 +268,6 @@ def load_ranges_from_json_file(file):
 
 
 def choose_random_spot(ranges_data, table_type):
-    """Choisit un spot au hasard pour le format donné."""
     candidates = [
         (key, spot)
         for key, spot in ranges_data.items()
@@ -264,10 +279,6 @@ def choose_random_spot(ranges_data, table_type):
 
 
 def get_correct_actions_for_hand(spot, hand_code):
-    """
-    Renvoie l'ensemble des actions correctes pour une main donnée
-    dans un spot donné (d'après le fichier de ranges).
-    """
     actions = spot.get("actions", {})
     non_fold_actions = set()
     for act_key in ["open", "call", "threebet", "open_shove", "threebet_shove"]:
@@ -276,11 +287,9 @@ def get_correct_actions_for_hand(spot, hand_code):
                 non_fold_actions.add(act_key)
 
     if not non_fold_actions:
-        return {"fold"}  # rien prévu -> fold
+        return {"fold"}
     else:
-        # la main peut être jouée de plusieurs façons
         result = set(non_fold_actions)
-        # si explicitement dans "fold", on l'ajoute aussi
         if hand_code in actions.get("fold", []):
             result.add("fold")
         return result
@@ -296,37 +305,17 @@ def scenario_pretty_label(scenario: str):
 
 
 # -----------------------------
-# Affichage d'une grille de range (correction)
+# Affichage grille de range
 # -----------------------------
-def canonical_hand_from_indices(i: int, j: int) -> str:
-    r1 = RANKS[i]
-    r2 = RANKS[j]
-    if i == j:
-        return r1 + r2
-    idx1 = RANKS.index(r1)
-    idx2 = RANKS.index(r2)
-    if idx1 < idx2:
-        hi, lo = r1, r2
-    else:
-        hi, lo = r2, r1
-    if i < j:
-        return hi + lo + "s"
-    else:
-        return hi + lo + "o"
-
-
 def render_range_grid(spot, highlight_hand=None):
-    """Affiche la range du spot sous forme de grille 13x13."""
     actions = spot.get("actions", {})
     st.markdown("##### Range de correction")
 
-    # Préparation: main -> set(actions)
     hand_actions = defaultdict(set)
     for act_name, hands in actions.items():
         for h in hands:
             hand_actions[h].add(act_name)
 
-    # En-tête colonnes
     header_cols = st.columns(len(RANKS) + 1)
     header_cols[0].markdown(" ")
     for j, r2 in enumerate(RANKS):
@@ -347,7 +336,6 @@ def render_range_grid(spot, highlight_hand=None):
             if not acts:
                 prefix = "⬜"
             else:
-                # concat des emojis correspondant aux actions
                 prefix = "".join(
                     ACTION_EMOJI[a] for a in sorted(acts) if a in ACTION_EMOJI
                 )
@@ -364,7 +352,7 @@ def render_range_grid(spot, highlight_hand=None):
 # Config Streamlit
 # -----------------------------
 st.set_page_config(
-    page_title="Poker Trainer",
+    page_title="Poker Trainer – Ranges & Leitner",
     page_icon="♠",
     layout="centered",
 )
@@ -406,7 +394,6 @@ else:
                 st.sidebar.success("Connexion réussie ✅")
             else:
                 st.sidebar.error("Identifiant ou mot de passe incorrect.")
-
     else:
         with st.sidebar.form("signup_form"):
             new_user = st.text_input("Nouvel identifiant")
@@ -428,9 +415,8 @@ else:
                     st.sidebar.success("Profil créé. Vous êtes maintenant connecté.")
                     st.session_state.user = new_user.strip()
 
-# Si pas connecté → on bloque
 if not st.session_state.user:
-    st.title("🃏 Poker Trainer – Connexion requise")
+    st.title("🃏 Poker Trainer – Ranges & Leitner")
     st.info("Crée un profil ou connecte-toi dans la colonne de gauche pour commencer.")
     st.stop()
 
@@ -454,7 +440,7 @@ mode_jeu = st.sidebar.radio(
     index=0,
 )
 
-# Selecteur stack favori (mode libre)
+# Sélecteur stack favori (mode libre)
 selected_stack = None
 if mode_jeu == "Libre (sans ranges)":
     stack_favori = st.sidebar.radio(
@@ -464,7 +450,7 @@ if mode_jeu == "Libre (sans ranges)":
     )
     selected_stack = None if stack_favori == "Aucun" else int(stack_favori)
 
-# Ranges JSON (mode correction)
+# Fichier de ranges (mode correction)
 if mode_jeu == "Avec ranges de correction":
     st.sidebar.markdown("### Fichier de ranges (.json)")
     ranges_file = st.sidebar.file_uploader(
@@ -473,7 +459,7 @@ if mode_jeu == "Avec ranges de correction":
 else:
     ranges_file = None
 
-# Reset profil (mode libre uniquement)
+# Reset profil (mode libre)
 if st.sidebar.button("♻️ Remettre à zéro ce profil (mode libre)"):
     st.session_state.weights = defaultdict(lambda: 1.0)
     st.session_state.stats = {"good": 0, "bad": 0}
@@ -487,35 +473,33 @@ if "weights" not in st.session_state or "stats" not in st.session_state:
     st.session_state.weights, st.session_state.stats = load_data(username)
 
 # états communs
-for key, val in [
-    ("current_case", None),
-    ("current_pos", None),
-    ("current_stack", None),
-    ("current_hand_html", ""),
-    ("current_extra", ""),
-    ("current_scenario_label", ""),
-    ("current_cards", ("A♠", "K♠")),
-]:
+default_values = {
+    "current_case": None,
+    "current_pos": None,
+    "current_stack": None,
+    "current_hand_html": "",
+    "current_extra": "",
+    "current_scenario_label": "",
+    "current_cards": ("A♠", "K♠"),
+}
+for key, val in default_values.items():
     if key not in st.session_state:
         st.session_state[key] = val
 
 # états spécifiques mode correction
-if "ranges_data" not in st.session_state:
-    st.session_state.ranges_data = {}
-if "range_spot_keys" not in st.session_state:
-    st.session_state.range_spot_keys = []
-if "current_spot_key" not in st.session_state:
-    st.session_state.current_spot_key = None
-if "current_hand_code" not in st.session_state:
-    st.session_state.current_hand_code = None
-if "current_correct_actions" not in st.session_state:
-    st.session_state.current_correct_actions = set()
-if "show_correction" not in st.session_state:
-    st.session_state.show_correction = False
-if "last_correction_spot" not in st.session_state:
-    st.session_state.last_correction_spot = None
-if "last_correction_hand" not in st.session_state:
-    st.session_state.last_correction_hand = None
+for key, val in [
+    ("ranges_data", {}),
+    ("range_spot_keys", []),
+    ("current_spot_key", None),
+    ("current_hand_code", None),
+    ("current_correct_actions", set()),
+    ("show_correction", False),
+    ("last_correction_spot", None),
+    ("last_correction_hand", None),
+    ("last_result", None),
+]:
+    if key not in st.session_state:
+        st.session_state[key] = val
 
 # stats mode correction (non persistées pour l'instant)
 if "range_stats" not in st.session_state:
@@ -532,7 +516,7 @@ weights = st.session_state.weights
 stats = st.session_state.stats
 
 # -----------------------------
-# Chargement des ranges si mode correction
+# Chargement ranges si besoin
 # -----------------------------
 if mode_jeu == "Avec ranges de correction":
     if ranges_file is not None:
@@ -544,7 +528,7 @@ if mode_jeu == "Avec ranges de correction":
         st.session_state.range_spot_keys = []
 
 # -----------------------------
-# Affichage principal (carte)
+# Affichage du spot courant
 # -----------------------------
 st.title("🃏 Poker Trainer – Ranges & Leitner")
 
@@ -592,7 +576,6 @@ if extra_text:
 if scenario_label:
     st.caption(f"Scénario : {scenario_label}")
 
-
 st.markdown("---")
 
 # -----------------------------
@@ -610,12 +593,15 @@ def do_roll_free():
     st.session_state.current_scenario_label = scen_label
     st.session_state.current_cards = cards
     st.session_state.show_correction = False
+    st.session_state.last_result = None
 
 
 def do_roll_range():
     ranges_data = st.session_state.ranges_data
     if not ranges_data:
-        st.warning("Aucune range chargée. Merci de fournir un fichier JSON dans la colonne de gauche.")
+        st.warning(
+            "Aucune range chargée. Merci de fournir un fichier JSON dans la colonne de gauche."
+        )
         return
 
     spot_key, spot = choose_random_spot(ranges_data, table_type)
@@ -627,7 +613,6 @@ def do_roll_range():
     stack = spot["stack"]
     scenario = spot["scenario"]
 
-    # Tirage d'une main
     deck = build_deck()
     random.shuffle(deck)
     c1, c2 = deck[:2]
@@ -640,7 +625,6 @@ def do_roll_range():
 
     hand_html_new = f"{colorize(c1)}&nbsp;&nbsp;{colorize(c2)}"
 
-    # Texte pour le scénario
     scen_label = scenario_pretty_label(scenario)
     extra = ""
     if scenario.startswith("vs_open_"):
@@ -659,9 +643,10 @@ def do_roll_range():
     st.session_state.current_hand_code = hand_code
     st.session_state.current_correct_actions = correct_actions
     st.session_state.show_correction = False
+    st.session_state.last_result = None
 
 
-# Première main si rien n'est affiché
+# Première main si rien encore
 if st.session_state.current_pos is None:
     if mode_jeu == "Libre (sans ranges)":
         do_roll_free()
@@ -699,20 +684,20 @@ if mode_jeu == "Libre (sans ranges)":
         do_roll_free()
 
 else:
-    # Mode "Avec ranges de correction"
+    # ---------- Mode "Avec ranges de correction" ----------
     st.markdown("### Que fais-tu dans ce spot ?")
 
     col_a1, col_a2, col_a3 = st.columns(3)
     col_b1, col_b2, col_b3 = st.columns(3)
 
     actions_clicked = {}
-
     actions_clicked["fold"] = col_a1.button(f"{ACTION_EMOJI['fold']} Fold")
     actions_clicked["call"] = col_a2.button(f"{ACTION_EMOJI['call']} Call")
     actions_clicked["open"] = col_a3.button(f"{ACTION_EMOJI['open']} Open")
-
     actions_clicked["threebet"] = col_b1.button(f"{ACTION_EMOJI['threebet']} 3-bet")
-    actions_clicked["open_shove"] = col_b2.button(f"{ACTION_EMOJI['open_shove']} Open shove")
+    actions_clicked["open_shove"] = col_b2.button(
+        f"{ACTION_EMOJI['open_shove']} Open shove"
+    )
     actions_clicked["threebet_shove"] = col_b3.button(
         f"{ACTION_EMOJI['threebet_shove']} 3-bet shove"
     )
@@ -720,7 +705,6 @@ else:
     clicked_new_range = st.button("Nouvelle main (mode ranges)")
 
     def handle_answer(chosen_action):
-        # Mise à jour des stats en mode range
         rs = st.session_state.range_stats
         rs["played"] += 1
         pos = st.session_state.current_pos
@@ -731,6 +715,7 @@ else:
         if chosen_action in correct:
             rs["correct"] += 1
             st.session_state.show_correction = False
+            st.session_state.last_result = "good"
         else:
             rs["wrong"] += 1
             rs["errors_by_pos"][pos] += 1
@@ -741,26 +726,40 @@ else:
                 st.session_state.current_spot_key
             )
             st.session_state.last_correction_hand = hand_code
+            st.session_state.last_result = "bad"
 
         st.session_state.range_stats = rs
 
+    # Gestion des clics sur actions
     for act_key, pressed in actions_clicked.items():
         if pressed:
             handle_answer(act_key)
-            do_roll_range()
             break
 
+    # Bouton pour passer à la main suivante
     if clicked_new_range:
         do_roll_range()
 
+    # Feedback textuel
+    if st.session_state.last_result == "good":
+        st.success("Bonne réponse ✅")
+    elif st.session_state.last_result == "bad":
+        corr = ", ".join(
+            ACTION_LABELS[a]
+            for a in sorted(st.session_state.current_correct_actions)
+        )
+        st.error(f"Mauvaise réponse ❌ — actions correctes possibles : {corr}")
+
 # -----------------------------
-# Affichage éventuel de la correction (mode ranges)
+# Affichage de la correction (mode ranges)
 # -----------------------------
 if mode_jeu == "Avec ranges de correction" and st.session_state.show_correction:
     spot = st.session_state.last_correction_spot
     hand_code = st.session_state.last_correction_hand
     if spot is not None and hand_code is not None:
-        with st.expander("Voir la range de correction pour ce spot (après erreur)", expanded=True):
+        with st.expander(
+            "Voir la range de correction pour ce spot (après erreur)", expanded=True
+        ):
             st.markdown(
                 f"*Spot :* **{spot.get('table_type','?')}**, "
                 f"Position **{spot.get('position','?')}**, "
@@ -792,7 +791,7 @@ if weights:
             st.write(f"- {pos} – {stack} BB (poids {w:.2f})")
 
 # -----------------------------
-# Statistiques mode ranges (erreurs)
+# Statistiques mode ranges
 # -----------------------------
 st.markdown("---")
 st.subheader("📊 Statistiques – Mode ranges de correction")
@@ -809,7 +808,6 @@ if rs["played"]:
 if rs["played"] >= 10 and rs["wrong"] > 0:
     st.markdown("#### Erreurs les plus fréquentes")
 
-    # Positions
     if rs["errors_by_pos"]:
         st.write("**Par position :**")
         for pos, cnt in sorted(
@@ -817,7 +815,6 @@ if rs["played"] >= 10 and rs["wrong"] > 0:
         )[:5]:
             st.write(f"- {pos} : {cnt} erreurs")
 
-    # Stacks
     if rs["errors_by_stack"]:
         st.write("**Par stack :**")
         for stck, cnt in sorted(
@@ -825,7 +822,6 @@ if rs["played"] >= 10 and rs["wrong"] > 0:
         )[:5]:
             st.write(f"- {stck} BB : {cnt} erreurs")
 
-    # Mains
     if rs["errors_by_hand"]:
         st.write("**Par main (top 10) :**")
         for h, cnt in sorted(
@@ -833,4 +829,6 @@ if rs["played"] >= 10 and rs["wrong"] > 0:
         )[:10]:
             st.write(f"- {h} : {cnt} erreurs")
 else:
-    st.info("Les statistiques détaillées apparaîtront après au moins 10 mains jouées en mode ranges.")
+    st.info(
+        "Les statistiques détaillées apparaîtront après au moins 10 mains jouées en mode ranges."
+    )
