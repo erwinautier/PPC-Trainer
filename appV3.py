@@ -332,7 +332,7 @@ def render_range_grid(spot_def, highlight_hand=None):
                 elif "call" in acts:
                     color = "#FACC15"      # call = jaune
                 else:
-                    color = "#6B7280"      # autre = gris
+                    color = "#EBEBEB"      # autre = gris
 
             # Surlignage de la main fautive (tout le fond de la cellule)
             highlight_style = ""
