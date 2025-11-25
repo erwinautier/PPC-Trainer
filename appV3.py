@@ -263,63 +263,93 @@ def get_correct_actions_for_hand(spot_def, hand_code):
 
 
 def render_range_grid(spot_def, highlight_hand=None):
-    """Affiche la range sous forme de grille 13x13 alignée."""
+    """Affiche la range sous forme de tableau HTML scrollable (plus joli sur mobile)."""
+    from collections import defaultdict
+
     actions = spot_def.get("actions", {})
     st.markdown("##### Range de correction")
 
+    # main -> set(actions)
     hand_actions = defaultdict(set)
     for act_name, hands in actions.items():
         for h in hands:
             hand_actions[h].add(act_name)
 
-    header = st.columns(len(RANKS) + 1)
-    header[0].markdown(" ")
-    for j, r2 in enumerate(RANKS):
-        header[j + 1].markdown(
-            f"<div style='text-align:center;'><b>{r2}</b></div>",
-            unsafe_allow_html=True,
+    html_parts = []
+
+    # Conteneur scrollable horizontalement
+    html_parts.append(
+        "<div style='overflow-x:auto; max-width:100%; border:1px solid #e5e7eb; "
+        "border-radius:12px; padding:8px; background-color:#fafafa;'>"
+    )
+    html_parts.append(
+        "<table style='border-collapse:collapse; font-size:11px; min-width:600px;'>"
+    )
+
+    # En-tête colonnes
+    html_parts.append("<thead><tr>")
+    html_parts.append("<th style='padding:4px 6px; text-align:center;'></th>")
+    for r2 in RANKS:
+        html_parts.append(
+            f"<th style='padding:4px 6px; text-align:center;'>{r2}</th>"
+        )
+    html_parts.append("</tr></thead>")
+
+    # Corps de table
+    html_parts.append("<tbody>")
+    for i, r1 in enumerate(RANKS):
+        html_parts.append("<tr>")
+        # En-tête de ligne
+        html_parts.append(
+            f"<th style='padding:4px 6px; text-align:center;'>{r1}</th>"
         )
 
-    for i, r1 in enumerate(RANKS):
-        cols = st.columns(len(RANKS) + 1)
-        cols[0].markdown(
-            f"<div style='text-align:center;'><b>{r1}</b></div>",
-            unsafe_allow_html=True,
-        )
         for j, r2 in enumerate(RANKS):
             hand = canonical_grid(i, j)
             acts = hand_actions.get(hand, set())
 
+            # Couleur de la pastille
             if not acts:
-                # Fold par défaut : point blanc cerclé
-                color = "#FFFFFF"
+                color = "#FFFFFF"          # fold par défaut = pastille blanche
                 border = "1px solid #D1D5DB"
             else:
                 border = "none"
                 if "open_shove" in acts or "threebet_shove" in acts:
-                    color = "#111827"
+                    color = "#111827"      # shove = noir
                 elif "threebet" in acts:
-                    color = "#DC2626"
+                    color = "#DC2626"      # 3-bet = rouge
                 elif "open" in acts:
-                    color = "#16A34A"
+                    color = "#16A34A"      # open = vert
                 elif "call" in acts:
-                    color = "#FACC15"
+                    color = "#FACC15"      # call = jaune
                 else:
-                    color = "#6B7280"
+                    color = "#6B7280"      # autre = gris
 
+            # Surlignage de la main fautive
             highlight_style = ""
             if highlight_hand is not None and hand == highlight_hand:
-                highlight_style = "background-color:#E5E7EB;border-radius:6px;"
+                highlight_style = "background-color:#E5E7EB; border-radius:6px;"
 
             cell_html = f"""
-            <div style="font-size:11px;line-height:1.1;text-align:center;{highlight_style}">
-              <span style="display:inline-block;width:18px;height:18px;
-                           border-radius:999px;background-color:{color};
-                           border:{border};"></span><br>
-              <span>{hand}</span>
-            </div>
+            <td style="padding:3px 4px; text-align:center; {highlight_style}">
+              <div style="font-size:11px; line-height:1.1;">
+                <span style="
+                    display:inline-block;
+                    width:18px; height:18px;
+                    border-radius:999px;
+                    background-color:{color};
+                    border:{border};
+                "></span><br/>
+                <span>{hand}</span>
+              </div>
+            </td>
             """
-            cols[j + 1].markdown(cell_html, unsafe_allow_html=True)
+            html_parts.append(cell_html)
+
+        html_parts.append("</tr>")
+    html_parts.append("</tbody></table></div>")
+
+    st.markdown("".join(html_parts), unsafe_allow_html=True)
 
 
 # =========================================================
