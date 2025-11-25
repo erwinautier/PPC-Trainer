@@ -727,7 +727,7 @@ if spot:
         # 1) Bouton "Nouvelle main" centré sous le scénario
         col_left, col_center, col_right = st.columns([1, 2, 1])
         with col_center:
-            clicked_new_range = st.button("🔄 Nouvelle main")
+            clicked_new_range = st.button("🔄 Nouvelle main", use_container_width=True)
 
         # 2) Boutons d'action en dessous
         st.markdown("### Que fais-tu dans ce spot ?")
