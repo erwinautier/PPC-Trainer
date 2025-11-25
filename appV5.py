@@ -608,7 +608,7 @@ def new_range_spot():
 # UI principale
 # =========================================================
 
-# (On supprime le gros titre pour gagner de la place sur téléphone)
+# Pas de gros titre pour gagner de la place sur téléphone
 st.markdown(f"*Profil : **{username}***")
 
 card_container = st.empty()
@@ -739,35 +739,37 @@ if spot:
         with col_center:
             clicked_new_range = st.button("🔄 Nouvelle main", use_container_width=True)
 
-        # 3) Boutons d’action sur DEUX colonnes (téléphone friendly)
+        # 3) Sélection compacte de l'action (idéal téléphone)
         st.markdown("### Que fais-tu dans ce spot ?")
-        colL, colR = st.columns(2)
 
-        with colL:
-            btn_fold = st.button(f"{ACTION_EMOJI['fold']} Fold", key="act_fold", use_container_width=True)
-            btn_open = st.button(f"{ACTION_EMOJI['open']} Open", key="act_open", use_container_width=True)
-            btn_threebet = st.button(f"{ACTION_EMOJI['threebet']} 3-bet", key="act_threebet", use_container_width=True)
-        with colR:
-            btn_call = st.button(f"{ACTION_EMOJI['call']} Call", key="act_call", use_container_width=True)
-            btn_open_shove = st.button(f"{ACTION_EMOJI['open_shove']} Open shove", key="act_open_shove", use_container_width=True)
-            btn_threebet_shove = st.button(
-                f"{ACTION_EMOJI['threebet_shove']} 3-bet shove",
-                key="act_threebet_shove",
-                use_container_width=True,
-            )
+        action_options = [
+            ("fold", f"{ACTION_EMOJI['fold']} Fold"),
+            ("call", f"{ACTION_EMOJI['call']} Call"),
+            ("open", f"{ACTION_EMOJI['open']} Open"),
+            ("threebet", f"{ACTION_EMOJI['threebet']} 3-bet"),
+            ("open_shove", f"{ACTION_EMOJI['open_shove']} Open shove"),
+            ("threebet_shove", f"{ACTION_EMOJI['threebet_shove']} 3-bet shove"),
+        ]
+        labels = [lbl for _, lbl in action_options]
 
-        actions_clicked = {
-            "fold": btn_fold,
-            "open": btn_open,
-            "threebet": btn_threebet,
-            "call": btn_call,
-            "open_shove": btn_open_shove,
-            "threebet_shove": btn_threebet_shove,
-        }
+        selected_label = st.selectbox(
+            "Choisis ton action :",
+            options=labels,
+            key="action_selectbox",
+        )
 
-        # Évaluation des actions
-        for act_key, pressed in actions_clicked.items():
-            if pressed:
+        validate_action = st.button("Valider l'action", use_container_width=True)
+
+        # Évaluation de l'action sélectionnée
+        if validate_action:
+            # retrouver la clé correspondant au label
+            selected_key = None
+            for key, lbl in action_options:
+                if lbl == selected_label:
+                    selected_key = key
+                    break
+
+            if selected_key is not None:
                 rs = st.session_state.range_stats
                 rs["played"] += 1
                 pos = spot["position"]
@@ -775,7 +777,7 @@ if spot:
                 hand_code = spot["hand_code"]
                 correct = spot["correct_actions"]
 
-                if act_key in correct:
+                if selected_key in correct:
                     rs["correct"] += 1
                     st.session_state.show_correction = False
                     st.session_state.last_result = "good"
