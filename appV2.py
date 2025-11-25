@@ -557,12 +557,7 @@ stack_text = (
     else "--"
 )
 hand_html = st.session_state.current_hand_html or "--"
-extra_html = (
-    f"<div style='margin-top:4px;color:#555;font-style:italic;'>"
-    f"{st.session_state.current_extra}</div>"
-    if st.session_state.current_extra
-    else ""
-)
+extra_text = st.session_state.current_extra or ""
 scenario_label = st.session_state.current_scenario_label or ""
 
 card_html = f"""
@@ -570,7 +565,7 @@ card_html = f"""
     background-color:#f5f5f5;
     border-radius:18px;
     padding:18px 22px;
-    margin-bottom:18px;
+    margin-bottom:6px;
     border:1px solid #e5e7eb;">
   <div style="display:flex;justify-content:space-between;gap:16px;">
     <div style="flex:1;text-align:center;">
@@ -585,13 +580,18 @@ card_html = f"""
   <div style="margin-top:14px;text-align:center;">
     <div style="font-size:12px;color:#666;">Main</div>
     <div style="font-size:32px;font-weight:bold;">{hand_html}</div>
-    {extra_html}
-    <div style="font-size:12px;color:#666;margin-top:6px;">{scenario_label}</div>
   </div>
 </div>
 """
 
 st.markdown(card_html, unsafe_allow_html=True)
+
+if extra_text:
+    st.caption(extra_text)
+
+if scenario_label:
+    st.caption(f"Scénario : {scenario_label}")
+
 
 st.markdown("---")
 
