@@ -356,7 +356,7 @@ def render_range_grid(spot, highlight_hand=None):
                 elif "call" in acts:
                     color = "#FACC15"  # jaune (call)
                 else:
-                    color = "#6B7280"  # gris
+                    color = "#000000"  # gris
                 symbol = "●"
 
             # Surlignage si c'est la main fautive
