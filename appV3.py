@@ -263,11 +263,16 @@ def get_correct_actions_for_hand(spot_def, hand_code):
 
 
 def render_range_grid(spot_def, highlight_hand=None):
-    """Affiche la range sous forme de tableau HTML scrollable (plus joli sur mobile)."""
+    """Affiche la range sous forme de tableau HTML scrollable (lisible sur mobile)."""
     from collections import defaultdict
 
     actions = spot_def.get("actions", {})
     st.markdown("##### Range de correction")
+
+    # Si vraiment rien n'est défini
+    if not actions:
+        st.info("Aucune action définie pour ce spot.")
+        return
 
     # main -> set(actions)
     hand_actions = defaultdict(set)
@@ -275,13 +280,16 @@ def render_range_grid(spot_def, highlight_hand=None):
         for h in hands:
             hand_actions[h].add(act_name)
 
+    # Construction du HTML
     html_parts = []
 
-    # Conteneur scrollable horizontalement
+    # Conteneur scrollable (horizontal) : évite la colonne géante sur téléphone
     html_parts.append(
-        "<div style='overflow-x:auto; max-width:100%; border:1px solid #e5e7eb; "
-        "border-radius:12px; padding:8px; background-color:#fafafa;'>"
+        "<div style='overflow-x:auto; max-width:100%; "
+        "border:1px solid #e5e7eb; border-radius:12px; "
+        "padding:8px; background-color:#fafafa;'>"
     )
+    # min-width pour que la grille reste grille même sur petit écran
     html_parts.append(
         "<table style='border-collapse:collapse; font-size:11px; min-width:600px;'>"
     )
@@ -295,7 +303,7 @@ def render_range_grid(spot_def, highlight_hand=None):
         )
     html_parts.append("</tr></thead>")
 
-    # Corps de table
+    # Corps du tableau
     html_parts.append("<tbody>")
     for i, r1 in enumerate(RANKS):
         html_parts.append("<tr>")
@@ -308,9 +316,9 @@ def render_range_grid(spot_def, highlight_hand=None):
             hand = canonical_grid(i, j)
             acts = hand_actions.get(hand, set())
 
-            # Couleur de la pastille
+            # Couleurs des pastilles
             if not acts:
-                color = "#FFFFFF"          # fold par défaut = pastille blanche
+                color = "#FFFFFF"          # fold par défaut = blanc
                 border = "1px solid #D1D5DB"
             else:
                 border = "none"
@@ -349,7 +357,8 @@ def render_range_grid(spot_def, highlight_hand=None):
         html_parts.append("</tr>")
     html_parts.append("</tbody></table></div>")
 
-    st.markdown("".join(html_parts), unsafe_allow_html=True)
+    table_html = "".join(html_parts)
+    st.markdown(table_html, unsafe_allow_html=True)
 
 
 # =========================================================
