@@ -2,20 +2,10 @@ import os
 import sys
 import json
 import random
-import hashlib
 from collections import defaultdict
 
 import streamlit as st
 import streamlit.components.v1 as components
-
-# =========================================================
-# Configuration globale
-# =========================================================
-st.set_page_config(
-    page_title="Poker Trainer – Ranges & Leitner",
-    page_icon="♠",
-    layout="centered",
-)
 
 # --------------------- Constantes Poker -------------------
 RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
@@ -46,7 +36,7 @@ ACTION_EMOJI = {
 
 
 # =========================================================
-# Fonctions utilitaires
+# Fonctions utilitaires communes
 # =========================================================
 def base_dir():
     """Dossier de base de l'application (utile aussi en exécutable)."""
@@ -94,49 +84,6 @@ def scenario_pretty_label(scenario: str):
         vil = scenario[len("vs_open_"):]
         return f"Vs open {vil}"
     return scenario
-
-
-# =========================================================
-# Authentification
-# =========================================================
-USERS_FILE = os.path.join(base_dir(), "users.json")
-
-
-def load_users():
-    if os.path.exists(USERS_FILE):
-        try:
-            return json.load(open(USERS_FILE, "r", encoding="utf-8"))
-        except Exception:
-            return {}
-    return {}
-
-
-def save_users(users):
-    json.dump(users, open(USERS_FILE, "w", encoding="utf-8"), indent=2)
-
-
-def hash_pw(pwd, salt):
-    return hashlib.sha256((salt + pwd).encode()).hexdigest()
-
-
-def create_user(username, pwd):
-    users = load_users()
-    username = username.strip()
-    if not username or username in users:
-        return False
-    salt = os.urandom(16).hex()
-    users[username] = {"salt": salt, "hash": hash_pw(pwd, salt)}
-    save_users(users)
-    return True
-
-
-def check_login(username, pwd):
-    users = load_users()
-    username = username.strip()
-    info = users.get(username)
-    if not info:
-        return False
-    return info["hash"] == hash_pw(pwd, info["salt"])
 
 
 # =========================================================
@@ -273,7 +220,6 @@ def render_range_grid(spot_def, highlight_hand=None):
         st.info("Aucune action définie pour ce spot.")
         return
 
-    # main -> set(actions)
     hand_actions = defaultdict(set)
     for act_name, hands in actions.items():
         for h in hands:
@@ -282,7 +228,7 @@ def render_range_grid(spot_def, highlight_hand=None):
     html_parts = []
 
     html_parts.append(
-        "<div style='overflow-x:auto; max-width:100%; "
+        "<div style='overflow-x:auto; max-width=100%; "
         "border:1px solid #e5e7eb; border-radius:8px; "
         "padding:4px; background-color:#fafafa;'>"
     )
@@ -329,7 +275,7 @@ def render_range_grid(spot_def, highlight_hand=None):
 
             highlight_style = ""
             if highlight_hand is not None and hand == highlight_hand:
-                highlight_style = "background-color:#FF0000; border-radius:4px;"
+                highlight_style = "background-color:#E5E7EB; border-radius:4px;"
 
             cell_html = f"""
             <td style="padding:1px; text-align:center; {highlight_style}">
@@ -348,190 +294,13 @@ def render_range_grid(spot_def, highlight_hand=None):
     html_parts.append("</tbody></table></div>")
 
     table_html = "".join(html_parts)
-
     components.html(table_html, height=260, scrolling=True)
 
 
 # =========================================================
-# États Streamlit
+# Création de spots (libre / ranges)
 # =========================================================
-if "user" not in st.session_state:
-    st.session_state.user = None
-
-if "ranges_default" not in st.session_state:
-    st.session_state.ranges_default = {}
-
-if "ranges_personal" not in st.session_state:
-    st.session_state.ranges_personal = {}
-
-if "ranges_data" not in st.session_state:
-    st.session_state.ranges_data = {}
-
-if "current_spot" not in st.session_state:
-    st.session_state.current_spot = None
-
-if "current_mode" not in st.session_state:
-    st.session_state.current_mode = None
-
-if "range_stats" not in st.session_state:
-    st.session_state.range_stats = {
-        "played": 0,
-        "correct": 0,
-        "wrong": 0,
-        "errors_by_pos": defaultdict(int),
-        "errors_by_stack": defaultdict(int),
-        "errors_by_hand": defaultdict(int),
-    }
-
-if "show_correction" not in st.session_state:
-    st.session_state.show_correction = False
-if "last_correction_spot" not in st.session_state:
-    st.session_state.last_correction_spot = None
-if "last_correction_hand" not in st.session_state:
-    st.session_state.last_correction_hand = None
-if "last_result" not in st.session_state:
-    st.session_state.last_result = None
-
-# =========================================================
-# Sidebar : logo + auth
-# =========================================================
-logo_path = "logo-penthievre.jpeg"
-logo_full = os.path.join(base_dir(), logo_path)
-if os.path.exists(logo_full):
-    st.sidebar.image(logo_full, use_column_width=True)
-
-st.sidebar.markdown("---")
-
-if st.session_state.user:
-    st.sidebar.markdown(f"### Connecté : `{st.session_state.user}`")
-    if st.sidebar.button("Se déconnecter"):
-        st.session_state.user = None
-else:
-    st.sidebar.markdown("### Connexion / création de profil")
-    mode_auth = st.sidebar.radio("Action", ["Se connecter", "Créer un profil"])
-    user = st.sidebar.text_input("Identifiant")
-    pwd = st.sidebar.text_input("Mot de passe", type="password")
-    if st.sidebar.button("Valider"):
-        if mode_auth == "Créer un profil":
-            if create_user(user, pwd):
-                st.session_state.user = user.strip()
-                st.sidebar.success("Profil créé et connecté.")
-            else:
-                st.sidebar.error("Identifiant déjà utilisé ou invalide.")
-        else:
-            if check_login(user, pwd):
-                st.session_state.user = user.strip()
-                st.sidebar.success("Connexion réussie.")
-            else:
-                st.sidebar.error("Identifiant ou mot de passe incorrect.")
-    st.stop()
-
-username = st.session_state.user
-leitner = load_leitner(username)
-
-# =========================================================
-# Sidebar : options générales
-# =========================================================
-st.sidebar.markdown("---")
-st.sidebar.markdown("### Options générales")
-
-table_type = st.sidebar.radio("Format de table", ["6-max", "8-max"])
-mode = st.sidebar.radio("Mode de jeu", ["Libre", "Ranges"])
-
-selected_stack = None
-if mode == "Libre":
-    fav = st.sidebar.radio(
-        "Stack surreprésenté (≈ 50 % des tirages)",
-        options=["Aucun"] + [str(s) for s in STACKS],
-    )
-    selected_stack = None if fav == "Aucun" else int(fav)
-
-# Gestion ranges en mode "Ranges"
-if mode == "Ranges":
-    st.sidebar.markdown("### Source des ranges")
-
-    ranges_source = st.sidebar.radio(
-        "Choix des ranges",
-        options=["Ranges par défaut", "Ranges perso"],
-    )
-
-    user_path = user_ranges_path(username)
-    default_path = default_ranges_path()
-
-    if not st.session_state.ranges_default and os.path.exists(default_path):
-        st.session_state.ranges_default = load_spots_from_path(default_path)
-
-    if not st.session_state.ranges_personal and os.path.exists(user_path):
-        st.session_state.ranges_personal = load_spots_from_path(user_path)
-
-    st.sidebar.markdown("### Importer / mettre à jour vos ranges perso")
-    ranges_file = st.sidebar.file_uploader(
-        "Charger un JSON exporté du range_editor",
-        type=["json"],
-        key="ranges_file_uploader",
-    )
-
-    if ranges_file is not None:
-        spots = load_ranges_from_filelike(ranges_file)
-        if spots:
-            try:
-                ranges_file.seek(0)
-                content = ranges_file.getvalue()
-                with open(user_path, "wb") as f:
-                    f.write(content)
-            except Exception:
-                pass
-            st.session_state.ranges_personal = spots
-            st.sidebar.success("Ranges perso mises à jour pour ce profil.")
-        else:
-            st.sidebar.error("Fichier de ranges invalide (clé 'spots' manquante ou incorrecte).")
-
-    # Choix effectif avec fallback
-    active_ranges = {}
-    if ranges_source == "Ranges perso":
-        if st.session_state.ranges_personal:
-            active_ranges = st.session_state.ranges_personal
-        else:
-            st.sidebar.error("Aucune ranges perso enregistrée. Utilisation des ranges par défaut.")
-            if st.session_state.ranges_default:
-                active_ranges = st.session_state.ranges_default
-            else:
-                active_ranges = {}
-    else:
-        if st.session_state.ranges_default:
-            active_ranges = st.session_state.ranges_default
-        elif st.session_state.ranges_personal:
-            st.sidebar.info("Pas de default_ranges.json, utilisation des ranges perso.")
-            active_ranges = st.session_state.ranges_personal
-        else:
-            active_ranges = {}
-
-    st.session_state.ranges_data = active_ranges
-else:
-    ranges_source = None
-    ranges_file = None
-
-# Reset Leitner
-if st.sidebar.button("♻️ Reset profil (mode libre)"):
-    leitner = {"weights": {}, "stats": {"good": 0, "bad": 0}}
-    save_leitner(username, leitner)
-    st.sidebar.success("Progrès mode libre remis à zéro.")
-
-
-# =========================================================
-# Changement de mode
-# =========================================================
-if st.session_state.current_mode != mode:
-    st.session_state.current_mode = mode
-    st.session_state.current_spot = None
-    st.session_state.show_correction = False
-    st.session_state.last_result = None
-
-
-# =========================================================
-# Fonctions de tirage de spots
-# =========================================================
-def new_free_spot():
+def new_free_spot(table_type, selected_stack, leitner):
     """Crée un nouveau spot pour le mode libre."""
     positions = POSITIONS_6MAX if table_type == "6-max" else POSITIONS_8MAX
 
@@ -564,7 +333,7 @@ def new_free_spot():
     }
 
 
-def new_range_spot():
+def new_range_spot(table_type):
     """Crée un nouveau spot pour le mode ranges."""
     ranges_data = st.session_state.ranges_data
     if not ranges_data:
@@ -605,29 +374,174 @@ def new_range_spot():
 
 
 # =========================================================
-# UI principale
+# FONCTION PRINCIPALE DU MODULE
 # =========================================================
+def run_trainer(username: str):
+    """
+    Module d'entraînement Poker (Libre + Ranges),
+    à appeler depuis app.py avec : run_trainer(username)
+    """
 
-# Pas de gros titre pour gagner de la place sur téléphone
-st.markdown(f"*Profil : **{username}***")
+    # ----------- Initialisation session_state -----------
+    if "ranges_default" not in st.session_state:
+        st.session_state.ranges_default = {}
+    if "ranges_personal" not in st.session_state:
+        st.session_state.ranges_personal = {}
+    if "ranges_data" not in st.session_state:
+        st.session_state.ranges_data = {}
+    if "current_spot" not in st.session_state:
+        st.session_state.current_spot = None
+    if "current_mode" not in st.session_state:
+        st.session_state.current_mode = None
+    if "range_stats" not in st.session_state:
+        st.session_state.range_stats = {
+            "played": 0,
+            "correct": 0,
+            "wrong": 0,
+            "errors_by_pos": defaultdict(int),
+            "errors_by_stack": defaultdict(int),
+            "errors_by_hand": defaultdict(int),
+        }
+    if "show_correction" not in st.session_state:
+        st.session_state.show_correction = False
+    if "last_correction_spot" not in st.session_state:
+        st.session_state.last_correction_spot = None
+    if "last_correction_hand" not in st.session_state:
+        st.session_state.last_correction_hand = None
+    if "last_result" not in st.session_state:
+        st.session_state.last_result = None
 
-card_container = st.empty()
-info_container = st.empty()
+    # =========================================================
+    # Sidebar : logo + options
+    # =========================================================
+    logo_path = os.path.join(base_dir(), "logo-penthievre.jpeg")
+    if os.path.exists(logo_path):
+        st.sidebar.image(logo_path, use_column_width=True)
 
-st.markdown("---")
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### Options générales")
 
-# Si pas de spot courant, en créer un
-if st.session_state.current_spot is None:
+    table_type = st.sidebar.radio("Format de table", ["6-max", "8-max"])
+    mode = st.sidebar.radio("Mode de jeu", ["Libre", "Ranges"])
+
+    leitner = load_leitner(username)
+
+    selected_stack = None
     if mode == "Libre":
-        st.session_state.current_spot = new_free_spot()
+        fav = st.sidebar.radio(
+            "Stack surreprésenté (≈ 50 % des tirages)",
+            options=["Aucun"] + [str(s) for s in STACKS],
+        )
+        selected_stack = None if fav == "Aucun" else int(fav)
+
+    # --------- Gestion ranges en mode "Ranges" ----------
+    if mode == "Ranges":
+        st.sidebar.markdown("### Source des ranges")
+
+        ranges_source = st.sidebar.radio(
+            "Choix des ranges",
+            options=["Ranges par défaut", "Ranges perso"],
+        )
+
+        user_path = user_ranges_path(username)
+        default_path = default_ranges_path()
+
+        if not st.session_state.ranges_default and os.path.exists(default_path):
+            st.session_state.ranges_default = load_spots_from_path(default_path)
+
+        if not st.session_state.ranges_personal and os.path.exists(user_path):
+            st.session_state.ranges_personal = load_spots_from_path(user_path)
+
+        st.sidebar.markdown("### Importer / mettre à jour vos ranges perso")
+        ranges_file = st.sidebar.file_uploader(
+            "Charger un JSON exporté du range_editor",
+            type=["json"],
+            key="trainer_ranges_file_uploader",
+        )
+
+        if ranges_file is not None:
+            spots = load_ranges_from_filelike(ranges_file)
+            if spots:
+                try:
+                    ranges_file.seek(0)
+                    content = ranges_file.getvalue()
+                    with open(user_path, "wb") as f:
+                        f.write(content)
+                except Exception:
+                    pass
+                st.session_state.ranges_personal = spots
+                st.sidebar.success("Ranges perso mises à jour pour ce profil.")
+            else:
+                st.sidebar.error(
+                    "Fichier de ranges invalide (clé 'spots' manquante ou incorrecte)."
+                )
+
+        # Choix effectif avec fallback
+        if ranges_source == "Ranges perso":
+            if st.session_state.ranges_personal:
+                active_ranges = st.session_state.ranges_personal
+            else:
+                st.sidebar.error(
+                    "Aucune ranges perso enregistrée. Utilisation des ranges par défaut."
+                )
+                if st.session_state.ranges_default:
+                    active_ranges = st.session_state.ranges_default
+                else:
+                    active_ranges = {}
+        else:
+            if st.session_state.ranges_default:
+                active_ranges = st.session_state.ranges_default
+            elif st.session_state.ranges_personal:
+                st.sidebar.info(
+                    "Pas de default_ranges.json, utilisation des ranges perso."
+                )
+                active_ranges = st.session_state.ranges_personal
+            else:
+                active_ranges = {}
+
+        st.session_state.ranges_data = active_ranges
+
     else:
-        st.session_state.current_spot = new_range_spot()
+        ranges_source = None
 
-spot = st.session_state.current_spot
+    # --------- Reset Leitner ---------
+    if st.sidebar.button("♻️ Reset profil (mode libre)"):
+        leitner = {"weights": {}, "stats": {"good": 0, "bad": 0}}
+        save_leitner(username, leitner)
+        st.sidebar.success("Progrès mode libre remis à zéro.")
 
-if not spot:
-    st.warning("Impossible de générer un spot (vérifie les ranges en mode Ranges).")
-else:
+    # =========================================================
+    # Changement de mode
+    # =========================================================
+    if st.session_state.current_mode != mode:
+        st.session_state.current_mode = mode
+        st.session_state.current_spot = None
+        st.session_state.show_correction = False
+        st.session_state.last_result = None
+
+    # =========================================================
+    # UI principale
+    # =========================================================
+    st.markdown(f"*Profil : **{username}***")
+    card_container = st.empty()
+    info_container = st.empty()
+    st.markdown("---")
+
+    # Création du spot si nécessaire
+    if st.session_state.current_spot is None:
+        if mode == "Libre":
+            st.session_state.current_spot = new_free_spot(
+                table_type, selected_stack, leitner
+            )
+        else:
+            st.session_state.current_spot = new_range_spot(table_type)
+
+    spot = st.session_state.current_spot
+
+    if not spot:
+        st.warning("Impossible de générer un spot (vérifie les ranges en mode Ranges).")
+        return
+
     pos = spot["position"]
     stack = spot["stack"]
     c1, c2 = spot["cards"]
@@ -667,7 +581,6 @@ else:
     """
     card_container.markdown(card_html, unsafe_allow_html=True)
 
-    # ===== Scénario (plus gros) =====
     info_html = ""
     if extra_text:
         info_html += f"<div style='font-size:14px;margin-bottom:2px;'>{extra_text}</div>"
@@ -681,15 +594,12 @@ else:
             f"<div style='font-size:12px;color:#666;'>Spot : "
             f"<code>{spot['spot_key']}</code></div>"
         )
-
     if info_html:
         info_container.markdown(info_html, unsafe_allow_html=True)
 
-# =========================================================
-# Boutons & logique
-# =========================================================
-if spot:
-    # MODE LIBRE : boutons dessous
+    # =========================================================
+    # Boutons & logique
+    # =========================================================
     if mode == "Libre":
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -701,32 +611,36 @@ if spot:
 
         if clicked_good:
             leitner["stats"]["good"] += 1
-            update_weight(leitner, spot["position"], spot["stack"], factor=0.8)
+            update_weight(leitner, pos, stack, factor=0.8)
             save_leitner(username, leitner)
-            st.session_state.current_spot = new_free_spot()
+            st.session_state.current_spot = new_free_spot(
+                table_type, selected_stack, leitner
+            )
             st.session_state.show_correction = False
             st.session_state.last_result = None
             st.rerun()
 
         if clicked_bad:
             leitner["stats"]["bad"] += 1
-            update_weight(leitner, spot["position"], spot["stack"], factor=1.5)
+            update_weight(leitner, pos, stack, factor=1.5)
             save_leitner(username, leitner)
-            st.session_state.current_spot = new_free_spot()
+            st.session_state.current_spot = new_free_spot(
+                table_type, selected_stack, leitner
+            )
             st.session_state.show_correction = False
             st.session_state.last_result = None
             st.rerun()
 
         if clicked_new:
-            st.session_state.current_spot = new_free_spot()
+            st.session_state.current_spot = new_free_spot(
+                table_type, selected_stack, leitner
+            )
             st.session_state.show_correction = False
             st.session_state.last_result = None
             st.rerun()
 
     else:
         # ===== MODE RANGES =====
-
-        # 1) Message de réponse juste sous le scénario
         if st.session_state.last_result == "good":
             st.success("Bonne réponse ✅")
         elif st.session_state.last_result == "bad":
@@ -734,12 +648,10 @@ if spot:
             corr = ", ".join(ACTION_LABELS[a] for a in sorted(correct_actions))
             st.error(f"Mauvaise réponse ❌ — actions possibles : {corr}")
 
-        # 2) Bouton "Nouvelle main" centré
         col_left, col_center, col_right = st.columns([1, 2, 1])
         with col_center:
             clicked_new_range = st.button("🔄 Nouvelle main", use_container_width=True)
 
-        # 3) Sélection compacte de l'action (idéal téléphone)
         st.markdown("### Que fais-tu dans ce spot ?")
 
         action_options = [
@@ -760,9 +672,7 @@ if spot:
 
         validate_action = st.button("Valider l'action", use_container_width=True)
 
-        # Évaluation de l'action sélectionnée
         if validate_action:
-            # retrouver la clé correspondant au label
             selected_key = None
             for key, lbl in action_options:
                 if lbl == selected_label:
@@ -772,9 +682,6 @@ if spot:
             if selected_key is not None:
                 rs = st.session_state.range_stats
                 rs["played"] += 1
-                pos = spot["position"]
-                stack = spot["stack"]
-                hand_code = spot["hand_code"]
                 correct = spot["correct_actions"]
 
                 if selected_key in correct:
@@ -794,79 +701,90 @@ if spot:
                 st.session_state.range_stats = rs
                 st.rerun()
 
-        # Nouvelle main
         if clicked_new_range:
-            st.session_state.current_spot = new_range_spot()
+            st.session_state.current_spot = new_range_spot(table_type)
             st.session_state.show_correction = False
             st.session_state.last_result = None
             st.rerun()
 
-# =========================================================
-# Feedback / correction détaillée (range)
-# =========================================================
-if mode == "Ranges" and spot and st.session_state.show_correction:
-    sdef = st.session_state.last_correction_spot
-    hcode = st.session_state.last_correction_hand
-    if sdef is not None and hcode is not None:
-        with st.expander("Voir la range de correction pour ce spot", expanded=True):
-            st.markdown(
-                f"*Spot :* **{sdef.get('table_type','?')}**, "
-                f"Position **{sdef.get('position','?')}**, "
-                f"Stack **{sdef.get('stack','?')} BB**, "
-                f"Scénario `{sdef.get('scenario','?')}`"
-            )
-            render_range_grid(sdef, highlight_hand=hcode)
+    # =========================================================
+    # Feedback / correction détaillée (range)
+    # =========================================================
+    if mode == "Ranges" and st.session_state.show_correction:
+        sdef = st.session_state.last_correction_spot
+        hcode = st.session_state.last_correction_hand
+        if sdef is not None and hcode is not None:
+            with st.expander(
+                "Voir la range de correction pour ce spot", expanded=True
+            ):
+                st.markdown(
+                    f"*Spot :* **{sdef.get('table_type','?')}**, "
+                    f"Position **{sdef.get('position','?')}**, "
+                    f"Stack **{sdef.get('stack','?')} BB**, "
+                    f"Scénario `{sdef.get('scenario','?')}`"
+                )
+                render_range_grid(sdef, highlight_hand=hcode)
 
-# =========================================================
-# Statistiques mode libre
-# =========================================================
-st.markdown("---")
-st.subheader("📊 Statistiques – Mode libre")
+    # =========================================================
+    # Statistiques mode libre
+    # =========================================================
+    st.markdown("---")
+    st.subheader("📊 Statistiques – Mode libre")
 
-g = leitner["stats"]["good"]
-b = leitner["stats"]["bad"]
-tot = g + b
-rate = (g / tot * 100) if tot else 0.0
-st.write(f"- Bonnes réponses : **{g}**")
-st.write(f"- Mauvaises réponses : **{b}**")
-st.write(f"- Taux de réussite : **{rate:.1f}%**")
+    g = leitner["stats"]["good"]
+    b = leitner["stats"]["bad"]
+    tot = g + b
+    rate = (g / tot * 100) if tot else 0.0
+    st.write(f"- Bonnes réponses : **{g}**")
+    st.write(f"- Mauvaises réponses : **{b}**")
+    st.write(f"- Taux de réussite : **{rate:.1f}%**")
 
-if leitner["weights"]:
-    avg_w = sum(leitner["weights"].values()) / len(leitner["weights"])
-    st.write(f"- Poids moyen (difficulté) : **{avg_w:.2f}**")
-    hardest = sorted(leitner["weights"].items(), key=lambda kv: kv[1], reverse=True)[:3]
-    if hardest:
-        st.write("**Spots les plus difficiles (souvent revus) :**")
-        for key, w in hardest:
-            pos_, stack_ = key.split("|")
-            st.write(f"- {pos_} – {stack_} BB (poids {w:.2f})")
+    if leitner["weights"]:
+        avg_w = sum(leitner["weights"].values()) / len(leitner["weights"])
+        st.write(f"- Poids moyen (difficulté) : **{avg_w:.2f}**")
+        hardest = sorted(
+            leitner["weights"].items(), key=lambda kv: kv[1], reverse=True
+        )[:3]
+        if hardest:
+            st.write("**Spots les plus difficiles (souvent revus) :**")
+            for key, w in hardest:
+                pos_, stack_ = key.split("|")
+                st.write(f"- {pos_} – {stack_} BB (poids {w:.2f})")
 
-# =========================================================
-# Statistiques mode ranges
-# =========================================================
-st.markdown("---")
-st.subheader("📊 Statistiques – Mode ranges de correction")
+    # =========================================================
+    # Statistiques mode ranges
+    # =========================================================
+    st.markdown("---")
+    st.subheader("📊 Statistiques – Mode ranges de correction")
 
-rs = st.session_state.range_stats
-st.write(f"- Mains jouées : **{rs['played']}**")
-st.write(f"- Bonnes réponses : **{rs['correct']}**")
-st.write(f"- Mauvaises réponses : **{rs['wrong']}**")
-if rs["played"]:
-    st.write(f"- Taux de réussite : **{rs['correct'] / rs['played'] * 100:.1f}%**")
+    rs = st.session_state.range_stats
+    st.write(f"- Mains jouées : **{rs['played']}**")
+    st.write(f"- Bonnes réponses : **{rs['correct']}**")
+    st.write(f"- Mauvaises réponses : **{rs['wrong']}**")
+    if rs["played"]:
+        st.write(f"- Taux de réussite : **{rs['correct'] / rs['played'] * 100:.1f}%**")
 
-if rs["played"] >= 10 and rs["wrong"] > 0:
-    st.markdown("#### Erreurs les plus fréquentes")
-    if rs["errors_by_pos"]:
-        st.write("**Par position :**")
-        for pos_, cnt in sorted(rs["errors_by_pos"].items(), key=lambda kv: kv[1], reverse=True)[:5]:
-            st.write(f"- {pos_} : {cnt} erreurs")
-    if rs["errors_by_stack"]:
-        st.write("**Par stack :**")
-        for stck, cnt in sorted(rs["errors_by_stack"].items(), key=lambda kv: kv[1], reverse=True)[:5]:
-            st.write(f"- {stck} BB : {cnt} erreurs")
-    if rs["errors_by_hand"]:
-        st.write("**Par main (top 10) :**")
-        for h, cnt in sorted(rs["errors_by_hand"].items(), key=lambda kv: kv[1], reverse=True)[:10]:
-            st.write(f"- {h} : {cnt} erreurs")
-else:
-    st.info("Les stats détaillées apparaîtront après au moins 10 mains jouées en mode ranges.")
+    if rs["played"] >= 10 and rs["wrong"] > 0:
+        st.markdown("#### Erreurs les plus fréquentes")
+        if rs["errors_by_pos"]:
+            st.write("**Par position :**")
+            for pos_, cnt in sorted(
+                rs["errors_by_pos"].items(), key=lambda kv: kv[1], reverse=True
+            )[:5]:
+                st.write(f"- {pos_} : {cnt} erreurs")
+        if rs["errors_by_stack"]:
+            st.write("**Par stack :**")
+            for stck, cnt in sorted(
+                rs["errors_by_stack"].items(), key=lambda kv: kv[1], reverse=True
+            )[:5]:
+                st.write(f"- {stck} BB : {cnt} erreurs")
+        if rs["errors_by_hand"]:
+            st.write("**Par main (top 10) :**")
+            for h, cnt in sorted(
+                rs["errors_by_hand"].items(), key=lambda kv: kv[1], reverse=True
+            )[:10]:
+                st.write(f"- {h} : {cnt} erreurs")
+    else:
+        st.info(
+            "Les stats détaillées apparaîtront après au moins 10 mains jouées en mode ranges."
+        )
