@@ -3,6 +3,9 @@ import sys
 import json
 import random
 import hashlib
+import streamlit as st
+import streamlit.components.v1 as components
+
 from collections import defaultdict
 
 import streamlit as st
@@ -267,9 +270,9 @@ def render_range_grid(spot_def, highlight_hand=None):
     from collections import defaultdict
 
     actions = spot_def.get("actions", {})
+
     st.markdown("##### Range de correction")
 
-    # Si vraiment rien n'est défini
     if not actions:
         st.info("Aucune action définie pour ce spot.")
         return
@@ -280,16 +283,14 @@ def render_range_grid(spot_def, highlight_hand=None):
         for h in hands:
             hand_actions[h].add(act_name)
 
-    # Construction du HTML
     html_parts = []
 
-    # Conteneur scrollable (horizontal) : évite la colonne géante sur téléphone
+    # Conteneur scrollable (horizontal)
     html_parts.append(
         "<div style='overflow-x:auto; max-width:100%; "
         "border:1px solid #e5e7eb; border-radius:12px; "
         "padding:8px; background-color:#fafafa;'>"
     )
-    # min-width pour que la grille reste grille même sur petit écran
     html_parts.append(
         "<table style='border-collapse:collapse; font-size:11px; min-width:600px;'>"
     )
@@ -307,7 +308,7 @@ def render_range_grid(spot_def, highlight_hand=None):
     html_parts.append("<tbody>")
     for i, r1 in enumerate(RANKS):
         html_parts.append("<tr>")
-        # En-tête de ligne
+        # Tête de ligne
         html_parts.append(
             f"<th style='padding:4px 6px; text-align:center;'>{r1}</th>"
         )
@@ -316,9 +317,8 @@ def render_range_grid(spot_def, highlight_hand=None):
             hand = canonical_grid(i, j)
             acts = hand_actions.get(hand, set())
 
-            # Couleurs des pastilles
             if not acts:
-                color = "#FFFFFF"          # fold par défaut = blanc
+                color = "#FFFFFF"          # fold = blanc
                 border = "1px solid #D1D5DB"
             else:
                 border = "none"
@@ -333,7 +333,6 @@ def render_range_grid(spot_def, highlight_hand=None):
                 else:
                     color = "#6B7280"      # autre = gris
 
-            # Surlignage de la main fautive
             highlight_style = ""
             if highlight_hand is not None and hand == highlight_hand:
                 highlight_style = "background-color:#E5E7EB; border-radius:6px;"
@@ -358,7 +357,10 @@ def render_range_grid(spot_def, highlight_hand=None):
     html_parts.append("</tbody></table></div>")
 
     table_html = "".join(html_parts)
-    st.markdown(table_html, unsafe_allow_html=True)
+
+    # 👇 ICI : rendu HTML forcé, pas d'échappement
+    components.html(table_html, height=420, scrolling=True)
+
 
 
 # =========================================================
