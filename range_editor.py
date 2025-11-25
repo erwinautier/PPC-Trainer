@@ -9,22 +9,28 @@ import streamlit as st
 # Constantes poker
 # -----------------------------
 RANKS = ["A", "K", "Q", "J", "T", "9", "8", "7", "6", "5", "4", "3", "2"]
-POSITIONS = ["LJ", "HJ", "CO", "BTN", "SB", "BB"]
-STACKS = [100, 50, 25, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10]
-SCENARIOS = ["open"]  # extensible plus tard
 
-ACTIONS = ["open", "call", "threebet", "fold"]
+# Positions pour chaque format
+POSITIONS_6MAX = ["LJ", "HJ", "CO", "BTN", "SB", "BB"]
+POSITIONS_8MAX = ["UTG", "UTG+1", "LJ", "HJ", "CO", "BTN", "SB", "BB"]
+
+STACKS = [100, 50, 25, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10]
+
+# Actions (hors fold qui reste implicite)
+ACTIONS = ["open", "call", "threebet", "open_shove", "threebet_shove"]
 ACTION_LABELS = {
     "open": "Open",
     "call": "Call",
     "threebet": "3-bet",
-    "fold": "Fold",
+    "open_shove": "Open shove",
+    "threebet_shove": "3-bet shove",
 }
 ACTION_EMOJI = {
     "open": "🟢",
     "call": "🟡",
     "threebet": "🔴",
-    "fold": "🔵",
+    "open_shove": "🟣",       # violet
+    "threebet_shove": "⚫",   # noir
 }
 EMPTY_EMOJI = "⬜"
 
@@ -37,13 +43,18 @@ def base_dir():
 
 
 def make_spot_key(position: str, stack: int, scenario: str) -> str:
+    # On ne met pas le format dans la clé -> un même spot peut exister
+    # dans deux fichiers différents si besoin.
     return f"{position}_{stack}_{scenario}"
 
 
 def canonical_hand_from_indices(i: int, j: int) -> str:
     """
     Convertit indices (ligne, colonne) en main canonique :
-    diagonale = paires, triangle sup = offsuit, triangle inf = suited.
+    - diagonale : paires (AA, KK, ...)
+    - triangle supérieur : suited (AKs, AQs, ...)
+    - triangle inférieur : offsuit (AKo, AQo, ...)
+    (comme dans la majorité des rangers : haut = suited, bas = off)
     """
     r1 = RANKS[i]
     r2 = RANKS[j]
@@ -56,9 +67,9 @@ def canonical_hand_from_indices(i: int, j: int) -> str:
     else:
         hi, lo = r2, r1
     if i < j:
-        return hi + lo + "s"
+        return hi + lo + "s"   # triangle supérieur = suited
     else:
-        return hi + lo + "o"
+        return hi + lo + "o"   # triangle inférieur = offsuit
 
 
 def all_hands_set():
@@ -78,13 +89,15 @@ ALL_HANDS = all_hands_set()
 def update_hand_action(spot_key: str, hand_code: str):
     """Callback appelé quand on clique sur un bouton de la grille."""
     spots = st.session_state.spots
-    # récupérer le spot existant ou le créer
+    position, stack_str, scenario = spot_key.split("_", 2)
+    stack = int(stack_str)
+
     spot = spots.get(
         spot_key,
         {
-            "position": spot_key.split("_")[0],
-            "stack": int(spot_key.split("_")[1]),
-            "scenario": spot_key.split("_")[2],
+            "position": position,
+            "stack": stack,
+            "scenario": scenario,
             "hand_actions": {},
         },
     )
@@ -125,7 +138,8 @@ st.title("🧮 Éditeur de ranges préflop – mode grille cliquable")
 
 st.markdown(
     """
-- **Clique** sur les cases pour affecter des actions (Open / Call / 3-bet / Fold).  
+- **Choisis 6-max ou 8-max**, puis la position, le stack et le scénario.  
+- **Clique** sur les cases pour affecter des actions (Open / Call / 3-bet / Open shove / 3-bet shove).  
 - Une case peut avoir **plusieurs actions** (mix : par ex. Open + 3-bet).  
 - Toute case **non cochée** sera considérée comme **Fold** par défaut dans le fichier exporté.  
 - Tu peux créer **une liste de ranges** (spots) : un spot = Position + Stack + Scénario.
@@ -144,6 +158,12 @@ if "current_spot_key" not in st.session_state:
 
 if "current_action" not in st.session_state:
     st.session_state.current_action = "open"
+
+if "table_type" not in st.session_state:
+    st.session_state.table_type = "6-max"
+
+if "scenario" not in st.session_state:
+    st.session_state.scenario = "open"
 
 # -----------------------------
 # Sidebar : chargement / sauvegarde
@@ -221,29 +241,60 @@ st.sidebar.download_button(
 )
 
 # -----------------------------
-# Sélection du spot
+# Format de table & sélection du spot
 # -----------------------------
 st.subheader("🎯 Sélection du spot à éditer")
 
+table_type = st.radio(
+    "Format de table",
+    ["6-max", "8-max"],
+    index=0 if st.session_state.table_type == "6-max" else 1,
+    horizontal=True,
+)
+st.session_state.table_type = table_type
+
+if table_type == "6-max":
+    positions_list = POSITIONS_6MAX
+else:
+    positions_list = POSITIONS_8MAX
+
 col_sel1, col_sel2, col_sel3 = st.columns(3)
 with col_sel1:
-    position = st.selectbox("Position", POSITIONS, index=0)
+    position = st.selectbox("Position", positions_list, index=0)
 with col_sel2:
     stack = st.selectbox("Stack (BB)", STACKS, index=0)
+
+# Scénarios dépendants de la position (open + vs_open_X pour tous les X avant)
+pos_index = positions_list.index(position)
+previous_positions = positions_list[:pos_index]
+available_scenarios = ["open"] + [f"vs_open_{p}" for p in previous_positions]
+
 with col_sel3:
-    scenario = st.selectbox("Scénario", SCENARIOS, index=0)
+    default_idx = (
+        available_scenarios.index(st.session_state.scenario)
+        if st.session_state.scenario in available_scenarios
+        else 0
+    )
+    scenario = st.selectbox(
+        "Scénario",
+        available_scenarios,
+        index=default_idx,
+    )
+
+st.session_state.scenario = scenario
 
 spot_key = make_spot_key(position, stack, scenario)
 st.session_state.current_spot_key = spot_key
 st.markdown(f"*Clé du spot :* `{spot_key}`")
 
+# Récupération / création du spot courant
 current_spot = st.session_state.spots.get(
     spot_key,
     {
         "position": position,
         "stack": stack,
         "scenario": scenario,
-        "hand_actions": {},
+        "hand_actions": {},  # hand_code -> set(actions)
     },
 )
 hand_actions = current_spot["hand_actions"]
@@ -280,7 +331,7 @@ if st.button("🧹 Effacer toutes les mains de ce spot"):
     st.success("Toutes les mains de ce spot ont été effacées.")
 
 # -----------------------------
-# Grille 13x13 (avec callbacks on_click)
+# Grille 13x13
 # -----------------------------
 st.subheader("🧩 Grille des mains")
 
@@ -324,10 +375,12 @@ current_spot["hand_actions"] = st.session_state.spots.get(spot_key, current_spot
 st.session_state.spots[spot_key] = current_spot
 
 # -----------------------------
-# Aperçu des spots existants
+# Aperçu des spots existants + stats %
 # -----------------------------
 st.markdown("---")
 st.subheader("📚 Spots actuellement définis")
+
+TOTAL_HANDS = len(ALL_HANDS)  # 169
 
 if not st.session_state.spots:
     st.info("Aucun spot encore enregistré dans la session.")
@@ -339,6 +392,7 @@ else:
         ha = spot.get("hand_actions", {})
         counts = defaultdict(int)
 
+        # compter les actions (mains non marquées -> fold)
         for h in ALL_HANDS:
             acts = ha.get(h, set())
             if not acts:
@@ -348,10 +402,17 @@ else:
                     if act in ACTIONS:
                         counts[act] += 1
 
+        # % open = open + open_shove
+        open_like = counts["open"] + counts["open_shove"]
+        threebet_like = counts["threebet"] + counts["threebet_shove"]
+
+        open_pct = (open_like / TOTAL_HANDS * 100.0)
+        threebet_pct = (threebet_like / TOTAL_HANDS * 100.0)
+
         st.markdown(f"**{key}** – {pos}, {stck} BB, scénario `{scen}`")
         st.markdown(
-            f"- {ACTION_EMOJI['open']} Open : {counts['open']} mains\n"
+            f"- {ACTION_EMOJI['open']} Open (incl. shove) : {open_like} mains, soit **{open_pct:.1f}%**\n"
+            f"- {ACTION_EMOJI['threebet']} 3-bet (incl. shove) : {threebet_like} mains, soit **{threebet_pct:.1f}%**\n"
             f"- {ACTION_EMOJI['call']} Call : {counts['call']} mains\n"
-            f"- {ACTION_EMOJI['threebet']} 3-bet : {counts['threebet']} mains\n"
             f"- {ACTION_EMOJI['fold']} Fold : {counts['fold']} mains"
         )
