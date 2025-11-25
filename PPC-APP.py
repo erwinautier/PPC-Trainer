@@ -105,7 +105,7 @@ if st.session_state.user:
     st.sidebar.markdown(f"### Connecté : `{st.session_state.user}`")
     if st.sidebar.button("Se déconnecter"):
         st.session_state.user = None
-        st.experimental_rerun()
+        st.rerun()
 else:
     st.sidebar.markdown("### Connexion / création de profil")
     mode_auth = st.sidebar.radio("Action", ["Se connecter", "Créer un profil"])
