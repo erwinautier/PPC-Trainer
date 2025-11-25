@@ -9,9 +9,9 @@ import streamlit as st
 # Configuration globale
 # =========================================================
 st.set_page_config(
-    page_title="Préflop Trainer Suite",
+    page_title="Poker Trainer Suite",
     page_icon="♠",
-    layout="centered",
+    layout="wide",   # <= wide pour que l'éditeur de ranges ait de la place
 )
 
 # =========================================================
@@ -116,14 +116,14 @@ else:
             if create_user(user, pwd):
                 st.session_state.user = user.strip()
                 st.sidebar.success("Profil créé et connecté.")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.sidebar.error("Identifiant déjà utilisé ou invalide.")
         else:
             if check_login(user, pwd):
                 st.session_state.user = user.strip()
                 st.sidebar.success("Connexion réussie.")
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.sidebar.error("Identifiant ou mot de passe incorrect.")
     st.stop()
@@ -144,7 +144,7 @@ st.markdown(
 st.markdown("<hr style='margin:0.5rem 0 1rem 0;'/>", unsafe_allow_html=True)
 
 # ----- Écran d’accueil / choix du module -----
-col_left, col_center, col_right = st.columns([1, 3, 1])
+col_left, col_center, col_right = st.columns([1, 4, 1])
 
 with col_center:
     st.markdown(
