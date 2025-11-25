@@ -266,7 +266,7 @@ def get_correct_actions_for_hand(spot_def, hand_code):
 
 
 def render_range_grid(spot_def, highlight_hand=None):
-    """Affiche la range sous forme de tableau HTML scrollable (lisible sur mobile)."""
+    """Affiche la range sous forme de tableau HTML très compact (mobile-friendly)."""
     from collections import defaultdict
 
     actions = spot_def.get("actions", {})
@@ -285,22 +285,23 @@ def render_range_grid(spot_def, highlight_hand=None):
 
     html_parts = []
 
-    # Conteneur scrollable (horizontal)
+    # Conteneur scrollable. On garde overflow-x:auto au cas où, mais on compresse au max.
     html_parts.append(
         "<div style='overflow-x:auto; max-width:100%; "
-        "border:1px solid #e5e7eb; border-radius:12px; "
-        "padding:8px; background-color:#fafafa;'>"
+        "border:1px solid #e5e7eb; border-radius:8px; "
+        "padding:4px; background-color:#fafafa;'>"
     )
+    # min-width très réduite pour que ça tienne sur téléphone
     html_parts.append(
-        "<table style='border-collapse:collapse; font-size:11px; min-width:600px;'>"
+        "<table style='border-collapse:collapse; font-size:9px; min-width:260px;'>"
     )
 
     # En-tête colonnes
     html_parts.append("<thead><tr>")
-    html_parts.append("<th style='padding:4px 6px; text-align:center;'></th>")
+    html_parts.append("<th style='padding:2px; text-align:center;'></th>")
     for r2 in RANKS:
         html_parts.append(
-            f"<th style='padding:4px 6px; text-align:center;'>{r2}</th>"
+            f"<th style='padding:2px; text-align:center;'>{r2}</th>"
         )
     html_parts.append("</tr></thead>")
 
@@ -308,9 +309,9 @@ def render_range_grid(spot_def, highlight_hand=None):
     html_parts.append("<tbody>")
     for i, r1 in enumerate(RANKS):
         html_parts.append("<tr>")
-        # Tête de ligne
+        # Tête de ligne (rang)
         html_parts.append(
-            f"<th style='padding:4px 6px; text-align:center;'>{r1}</th>"
+            f"<th style='padding:2px; text-align:center;'>{r1}</th>"
         )
 
         for j, r2 in enumerate(RANKS):
@@ -333,22 +334,20 @@ def render_range_grid(spot_def, highlight_hand=None):
                 else:
                     color = "#6B7280"      # autre = gris
 
+            # Surlignage de la main fautive (tout le fond de la cellule)
             highlight_style = ""
             if highlight_hand is not None and hand == highlight_hand:
-                highlight_style = "background-color:#E5E7EB; border-radius:6px;"
+                highlight_style = "background-color:#E5E7EB; border-radius:4px;"
 
             cell_html = f"""
-            <td style="padding:3px 4px; text-align:center; {highlight_style}">
-              <div style="font-size:11px; line-height:1.1;">
-                <span style="
-                    display:inline-block;
-                    width:18px; height:18px;
-                    border-radius:999px;
-                    background-color:{color};
-                    border:{border};
-                "></span><br/>
-                <span>{hand}</span>
-              </div>
+            <td style="padding:1px; text-align:center; {highlight_style}">
+              <span style="
+                  display:inline-block;
+                  width:10px; height:10px;
+                  border-radius:999px;
+                  background-color:{color};
+                  border:{border};
+              "></span>
             </td>
             """
             html_parts.append(cell_html)
@@ -358,8 +357,9 @@ def render_range_grid(spot_def, highlight_hand=None):
 
     table_html = "".join(html_parts)
 
-    # 👇 ICI : rendu HTML forcé, pas d'échappement
-    components.html(table_html, height=420, scrolling=True)
+    # Affichage en HTML brut dans un iframe Streamlit
+    components.html(table_html, height=260, scrolling=True)
+
 
 
 
