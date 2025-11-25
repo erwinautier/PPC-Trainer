@@ -478,12 +478,16 @@ if mode_jeu == "Libre (sans ranges)":
 
 # Fichier de ranges (mode correction)
 if mode_jeu == "Avec ranges de correction":
-    st.sidebar.markdown("### Fichier de ranges (.json)")
-    ranges_file = st.sidebar.file_uploader(
-        "Charger un fichier de ranges (JSON v2)", type=["json"]
-    )
+    if ranges_file is not None:
+        # On (re)charge les ranges UNIQUEMENT si un fichier est fourni
+        ranges_data = load_ranges_from_json_file(ranges_file)
+        st.session_state.ranges_data = ranges_data
+        st.session_state.range_spot_keys = list(ranges_data.keys())
 else:
-    ranges_file = None
+    # Si on repasse en mode libre, on peut vider les ranges
+    st.session_state.ranges_data = {}
+    st.session_state.range_spot_keys = []
+
 
 # Reset profil (mode libre)
 if st.sidebar.button("♻️ Remettre à zéro ce profil (mode libre)"):
