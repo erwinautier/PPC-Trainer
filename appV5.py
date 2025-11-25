@@ -329,7 +329,7 @@ def render_range_grid(spot_def, highlight_hand=None):
 
             highlight_style = ""
             if highlight_hand is not None and hand == highlight_hand:
-                highlight_style = "background-color:#E5E7EB; border-radius:4px;"
+                highlight_style = "background-color:#FF0000; border-radius:4px;"
 
             cell_html = f"""
             <td style="padding:1px; text-align:center; {highlight_style}">
