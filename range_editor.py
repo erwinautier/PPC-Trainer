@@ -29,9 +29,9 @@ ACTION_EMOJI = {
     "open": "🟢",
     "call": "🟡",
     "threebet": "🔴",
-    "open_shove": "🟣",       # violet
-    "threebet_shove": "⚫",   # noir
-    "fold": "❌"
+    "open_shove": "🟣",
+    "threebet_shove": "⚫",
+    "fold": "❌",  # pour l'affichage des stats
 }
 EMPTY_EMOJI = "⬜"
 
@@ -43,10 +43,9 @@ def base_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 
-def make_spot_key(position: str, stack: int, scenario: str) -> str:
-    # On ne met pas le format dans la clé -> un même spot peut exister
-    # dans deux fichiers différents si besoin.
-    return f"{position}_{stack}_{scenario}"
+def make_spot_key(table_type: str, position: str, stack: int, scenario: str) -> str:
+    """ID de spot incluant le format (6-max/8-max)."""
+    return f"{table_type}_{position}_{stack}_{scenario}"
 
 
 def canonical_hand_from_indices(i: int, j: int) -> str:
@@ -90,12 +89,15 @@ ALL_HANDS = all_hands_set()
 def update_hand_action(spot_key: str, hand_code: str):
     """Callback appelé quand on clique sur un bouton de la grille."""
     spots = st.session_state.spots
-    position, stack_str, scenario = spot_key.split("_", 2)
+
+    # table_type, position, stack, scenario
+    table_type, position, stack_str, scenario = spot_key.split("_", 3)
     stack = int(stack_str)
 
     spot = spots.get(
         spot_key,
         {
+            "table_type": table_type,
             "position": position,
             "stack": stack,
             "scenario": scenario,
@@ -141,9 +143,9 @@ st.markdown(
     """
 - **Choisis 6-max ou 8-max**, puis la position, le stack et le scénario.  
 - **Clique** sur les cases pour affecter des actions (Open / Call / 3-bet / Open shove / 3-bet shove).  
-- Une case peut avoir **plusieurs actions** (mix : par ex. Open + 3-bet).  
+- Une case peut avoir **plusieurs actions** (mix).  
 - Toute case **non cochée** sera considérée comme **Fold** par défaut dans le fichier exporté.  
-- Tu peux créer **une liste de ranges** (spots) : un spot = Position + Stack + Scénario.
+- Tu peux créer **une liste de ranges** (spots) : un spot = Format + Position + Stack + Scénario.
 """
 )
 
@@ -151,7 +153,9 @@ st.markdown(
 # État en session
 # -----------------------------
 if "spots" not in st.session_state:
-    # spot_key -> {"position","stack","scenario","hand_actions": {hand: set(actions)}}
+    # spot_key -> {
+    #   "table_type","position","stack","scenario","hand_actions": {hand: set(actions)}
+    # }
     st.session_state.spots = {}
 
 if "current_spot_key" not in st.session_state:
@@ -166,6 +170,7 @@ if "table_type" not in st.session_state:
 if "scenario" not in st.session_state:
     st.session_state.scenario = "open"
 
+
 # -----------------------------
 # Sidebar : chargement / sauvegarde
 # -----------------------------
@@ -179,17 +184,20 @@ if uploaded is not None:
         data = json.load(uploaded)
         spots_json = data.get("spots", {})
         new_spots = {}
-        for key, spot in spots_json.items():
+        for old_key, spot in spots_json.items():
             pos = spot.get("position")
             stack = spot.get("stack")
             scen = spot.get("scenario", "open")
+            table_type = spot.get("table_type", "6-max")  # défaut
             actions = spot.get("actions", {})
             hand_actions = {}
             for act_name in ACTIONS:
                 for h in actions.get(act_name, []):
                     if h in ALL_HANDS:
                         hand_actions.setdefault(h, set()).add(act_name)
-            new_spots[key] = {
+            new_key = make_spot_key(table_type, pos, stack, scen)
+            new_spots[new_key] = {
+                "table_type": table_type,
                 "position": pos,
                 "stack": stack,
                 "scenario": scen,
@@ -207,6 +215,7 @@ if st.sidebar.button("🗑️ Effacer toutes les ranges de la session"):
 # Préparation export JSON (cases vides -> fold)
 export_spots = {}
 for key, spot in st.session_state.spots.items():
+    table_type = spot.get("table_type", "6-max")
     pos = spot["position"]
     stack = spot["stack"]
     scen = spot["scenario"]
@@ -223,6 +232,7 @@ for key, spot in st.session_state.spots.items():
                     actions_dict[act].append(h)
 
     export_spots[key] = {
+        "table_type": table_type,
         "position": pos,
         "stack": stack,
         "scenario": scen,
@@ -231,7 +241,7 @@ for key, spot in st.session_state.spots.items():
         },
     }
 
-export_data = {"version": 1, "spots": export_spots}
+export_data = {"version": 2, "spots": export_spots}
 export_json = json.dumps(export_data, indent=2)
 
 st.sidebar.download_button(
@@ -284,7 +294,7 @@ with col_sel3:
 
 st.session_state.scenario = scenario
 
-spot_key = make_spot_key(position, stack, scenario)
+spot_key = make_spot_key(table_type, position, stack, scenario)
 st.session_state.current_spot_key = spot_key
 st.markdown(f"*Clé du spot :* `{spot_key}`")
 
@@ -292,6 +302,7 @@ st.markdown(f"*Clé du spot :* `{spot_key}`")
 current_spot = st.session_state.spots.get(
     spot_key,
     {
+        "table_type": table_type,
         "position": position,
         "stack": stack,
         "scenario": scenario,
@@ -300,7 +311,33 @@ current_spot = st.session_state.spots.get(
 )
 hand_actions = current_spot["hand_actions"]
 
+# -----------------------------
+# Copie d'un spot vers le spot courant
+# -----------------------------
+st.markdown("#### 📋 Copier une range existante vers ce spot")
+
+existing_keys = sorted(st.session_state.spots.keys())
+copy_options = ["(Aucune)"] + existing_keys
+
+copy_from_key = st.selectbox(
+    "Copier depuis le spot :", copy_options, index=0, key="copy_from_key"
+)
+
+if st.button("📥 Copier cette range dans le spot courant"):
+    if copy_from_key != "(Aucune)" and copy_from_key in st.session_state.spots:
+        src_spot = st.session_state.spots[copy_from_key]
+        src_actions = src_spot.get("hand_actions", {})
+        # deep copy des sets
+        hand_actions = {h: set(acts) for h, acts in src_actions.items()}
+        current_spot["hand_actions"] = hand_actions
+        st.session_state.spots[spot_key] = current_spot
+        st.success(f"Range copiée depuis {copy_from_key} vers {spot_key}.")
+    else:
+        st.info("Choisis un spot de départ pour copier sa range.")
+
+# Bouton d'enregistrement explicite du spot courant
 if st.button("💾 Enregistrer cette range (ce spot)"):
+    current_spot["hand_actions"] = hand_actions
     st.session_state.spots[spot_key] = current_spot
     st.success(f"Range enregistrée pour {spot_key}. Tu peux passer à une autre.")
 
@@ -373,47 +410,65 @@ for i, r1 in enumerate(RANKS):
 current_spot["hand_actions"] = st.session_state.spots.get(spot_key, current_spot)[
     "hand_actions"
 ]
+current_spot["table_type"] = table_type
+current_spot["position"] = position
+current_spot["stack"] = stack
+current_spot["scenario"] = scenario
 st.session_state.spots[spot_key] = current_spot
 
 # -----------------------------
-# Aperçu des spots existants + stats %
+# Aperçu des stats (pour un spot choisi)
 # -----------------------------
 st.markdown("---")
-st.subheader("📚 Spots actuellement définis")
+st.subheader("📊 Statistiques d'un spot")
 
 TOTAL_HANDS = len(ALL_HANDS)  # 169
 
 if not st.session_state.spots:
     st.info("Aucun spot encore enregistré dans la session.")
 else:
-    for key, spot in sorted(st.session_state.spots.items()):
-        pos = spot["position"]
-        stck = spot["stack"]
-        scen = spot["scenario"]
-        ha = spot.get("hand_actions", {})
-        counts = defaultdict(int)
+    stats_options = ["Spot courant"] + sorted(st.session_state.spots.keys())
+    selected_stats_key = st.selectbox(
+        "Choisir le spot pour afficher les statistiques :",
+        stats_options,
+        index=0,
+    )
 
-        # compter les actions (mains non marquées -> fold)
-        for h in ALL_HANDS:
-            acts = ha.get(h, set())
-            if not acts:
-                counts["fold"] += 1
-            else:
-                for act in acts:
-                    if act in ACTIONS:
-                        counts[act] += 1
+    if selected_stats_key == "Spot courant":
+        stats_key = spot_key
+    else:
+        stats_key = selected_stats_key
 
-        # % open = open + open_shove
-        open_like = counts["open"] + counts["open_shove"]
-        threebet_like = counts["threebet"] + counts["threebet_shove"]
+    spot = st.session_state.spots.get(stats_key, current_spot)
+    table_type_stats = spot.get("table_type", "6-max")
+    pos = spot["position"]
+    stck = spot["stack"]
+    scen = spot["scenario"]
+    ha = spot.get("hand_actions", {})
+    counts = defaultdict(int)
 
-        open_pct = (open_like / TOTAL_HANDS * 100.0)
-        threebet_pct = (threebet_like / TOTAL_HANDS * 100.0)
+    for h in ALL_HANDS:
+        acts = ha.get(h, set())
+        if not acts:
+            counts["fold"] += 1
+        else:
+            for act in acts:
+                if act in ACTIONS:
+                    counts[act] += 1
 
-        st.markdown(f"**{key}** – {pos}, {stck} BB, scénario `{scen}`")
-        st.markdown(
-            f"- {ACTION_EMOJI['open']} Open (incl. shove) : {open_like} mains, soit **{open_pct:.1f}%**\n"
-            f"- {ACTION_EMOJI['threebet']} 3-bet (incl. shove) : {threebet_like} mains, soit **{threebet_pct:.1f}%**\n"
-            f"- {ACTION_EMOJI['call']} Call : {counts['call']} mains\n"
-            f"- {ACTION_EMOJI['fold']} Fold : {counts['fold']} mains"
-        )
+    open_like = counts["open"] + counts["open_shove"]
+    threebet_like = counts["threebet"] + counts["threebet_shove"]
+
+    open_pct = open_like / TOTAL_HANDS * 100.0
+    threebet_pct = threebet_like / TOTAL_HANDS * 100.0
+
+    st.markdown(
+        f"**Spot :** `{stats_key}`  \n"
+        f"Format : **{table_type_stats}**, Position : **{pos}**, Stack : **{stck} BB**, Scénario : `{scen}`"
+    )
+    st.markdown(
+        f"- {ACTION_EMOJI['open']} Open (incl. shove) : {open_like} mains, soit **{open_pct:.1f}%**\n"
+        f"- {ACTION_EMOJI['threebet']} 3-bet (incl. shove) : {threebet_like} mains, soit **{threebet_pct:.1f}%**\n"
+        f"- {ACTION_EMOJI['call']} Call : {counts['call']} mains\n"
+        f"- {ACTION_EMOJI['fold']} Fold : {counts['fold']} mains"
+    )
