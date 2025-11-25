@@ -71,6 +71,24 @@ def canonical_hand_from_indices(i: int, j: int) -> str:
     else:
         return hi + lo + "o"   # triangle inférieur = offsuit
 
+def hand_weight(hand: str) -> int:
+    """
+    Renvoie le nombre de combos pour une main donnée :
+    - Paires (AA, KK, ...) : 6 combos
+    - Suited (AKs, QJs, ...) : 4 combos
+    - Offsuit (AKo, QJo, ...) : 12 combos
+    """
+    hand = hand.strip().upper()
+    if len(hand) == 2:
+        # Paires, ex : "AA"
+        return 6
+    if len(hand) == 3:
+        if hand.endswith("S"):
+            return 4
+        if hand.endswith("O"):
+            return 12
+    return 0  # cas anormal, au pire on ne compte pas
+
 
 def all_hands_set():
     hands = set()
@@ -417,12 +435,13 @@ current_spot["scenario"] = scenario
 st.session_state.spots[spot_key] = current_spot
 
 # -----------------------------
-# Aperçu des stats (pour un spot choisi)
+# Aperçu des stats (pour un spot choisi, pondéré en combos)
 # -----------------------------
 st.markdown("---")
-st.subheader("📊 Statistiques d'un spot")
+st.subheader("📊 Statistiques d'un spot (pondérées en combos)")
 
-TOTAL_HANDS = len(ALL_HANDS)  # 169
+# Total de combos possibles sur 52 cartes = 1326
+TOTAL_COMBOS = sum(hand_weight(h) for h in ALL_HANDS)
 
 if not st.session_state.spots:
     st.info("Aucun spot encore enregistré dans la session.")
@@ -445,30 +464,48 @@ else:
     stck = spot["stack"]
     scen = spot["scenario"]
     ha = spot.get("hand_actions", {})
-    counts = defaultdict(int)
+
+    # Comptes pondérés en combos
+    combo_counts = defaultdict(int)
 
     for h in ALL_HANDS:
+        w = hand_weight(h)
         acts = ha.get(h, set())
         if not acts:
-            counts["fold"] += 1
+            combo_counts["fold"] += w
         else:
-            for act in acts:
-                if act in ACTIONS:
-                    counts[act] += 1
+            # Open-like = open ou open_shove
+            if "open" in acts or "open_shove" in acts:
+                combo_counts["open_like"] += w
+            # 3bet-like = threebet ou threebet_shove
+            if "threebet" in acts or "threebet_shove" in acts:
+                combo_counts["threebet_like"] += w
+            # Call
+            if "call" in acts:
+                combo_counts["call"] += w
 
-    open_like = counts["open"] + counts["open_shove"]
-    threebet_like = counts["threebet"] + counts["threebet_shove"]
+    open_like = combo_counts["open_like"]
+    threebet_like = combo_counts["threebet_like"]
+    call_combos = combo_counts["call"]
+    fold_combos = combo_counts["fold"]
 
-    open_pct = open_like / TOTAL_HANDS * 100.0
-    threebet_pct = threebet_like / TOTAL_HANDS * 100.0
+    open_pct = open_like / TOTAL_COMBOS * 100.0
+    threebet_pct = threebet_like / TOTAL_COMBOS * 100.0
+    call_pct = call_combos / TOTAL_COMBOS * 100.0
+    fold_pct = fold_combos / TOTAL_COMBOS * 100.0
 
     st.markdown(
         f"**Spot :** `{stats_key}`  \n"
-        f"Format : **{table_type_stats}**, Position : **{pos}**, Stack : **{stck} BB**, Scénario : `{scen}`"
+        f"Format : **{table_type_stats}**, Position : **{pos}**, "
+        f"Stack : **{stck} BB**, Scénario : `{scen}`"
     )
     st.markdown(
-        f"- {ACTION_EMOJI['open']} Open (incl. shove) : {open_like} mains, soit **{open_pct:.1f}%**\n"
-        f"- {ACTION_EMOJI['threebet']} 3-bet (incl. shove) : {threebet_like} mains, soit **{threebet_pct:.1f}%**\n"
-        f"- {ACTION_EMOJI['call']} Call : {counts['call']} mains\n"
-        f"- {ACTION_EMOJI['fold']} Fold : {counts['fold']} mains"
+        f"- {ACTION_EMOJI['open']} Open (incl. shove) : {open_like} combos, "
+        f"soit **{open_pct:.1f}%** des 1326 combos\n"
+        f"- {ACTION_EMOJI['threebet']} 3-bet (incl. shove) : {threebet_like} combos, "
+        f"soit **{threebet_pct:.1f}%**\n"
+        f"- {ACTION_EMOJI['call']} Call : {call_combos} combos, "
+        f"soit **{call_pct:.1f}%**\n"
+        f"- {ACTION_EMOJI['fold']} Fold : {fold_combos} combos, "
+        f"soit **{fold_pct:.1f}%**"
     )
