@@ -768,6 +768,8 @@ else:
     # Le changement de main ne se fait QUE ici :
     if clicked_new_range:
         do_roll_range()
+        st.experimental_rerun()
+
 
     # Feedback texte
     if st.session_state.last_result == "good":
