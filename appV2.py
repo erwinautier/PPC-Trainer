@@ -65,8 +65,7 @@ def canonical_hand_from_indices(i: int, j: int) -> str:
     r2 = RANKS[j]
     if i == j:
         return r1 + r2
-    idx1 = RANKS.index(r1)
-    idx2 = RANKS.index(r2)
+    idx1, idx2 = RANKS.index(r1), RANKS.index(r2)
     if idx1 < idx2:
         hi, lo = r1, r2
     else:
@@ -471,7 +470,7 @@ if mode_jeu == "Libre (sans ranges)":
     )
     selected_stack = None if stack_favori == "Aucun" else int(stack_favori)
 
-# Fichier de ranges (mode correction)
+# Fichier ranges (mode correction)
 ranges_file = None
 if mode_jeu == "Avec ranges de correction":
     st.sidebar.markdown("### Fichier de ranges (.json)")
@@ -507,6 +506,10 @@ for k, v in default_values.items():
     if k not in st.session_state:
         st.session_state[k] = v
 
+# mode courant (pour ne pas re-tirer une main au mauvais moment)
+if "current_mode" not in st.session_state:
+    st.session_state.current_mode = None
+
 if "ranges_data" not in st.session_state:
     st.session_state.ranges_data = {}
 if "current_spot_key" not in st.session_state:
@@ -540,11 +543,95 @@ stats = st.session_state.stats
 # -----------------------------
 # Chargement ranges si besoin
 # -----------------------------
-if mode_jeu == "Avec ranges de correction":
-    if ranges_file is not None:
-        st.session_state.ranges_data = load_ranges_from_json_file(ranges_file)
+if mode_jeu == "Avec ranges de correction" and ranges_file is not None:
+    st.session_state.ranges_data = load_ranges_from_json_file(ranges_file)
+
+ranges_data = st.session_state.ranges_data
+
+# -----------------------------
+# Fonctions de tirage (utilisent les états)
+# -----------------------------
+def do_roll_free():
+    pos, stack, h_html, extra, scen_label, cards = roll_free(
+        weights, selected_stack, table_type
+    )
+    st.session_state.current_case = (pos, stack)
+    st.session_state.current_pos = pos
+    st.session_state.current_stack = stack
+    st.session_state.current_hand_html = h_html
+    st.session_state.current_extra = extra
+    st.session_state.current_scenario_label = scen_label
+    st.session_state.current_cards = cards
+    st.session_state.show_correction = False
+    st.session_state.last_result = None
+    st.session_state.current_spot_key = None
+    st.session_state.current_hand_code = None
+    st.session_state.current_correct_actions = set()
+
+
+def do_roll_range():
+    if not ranges_data:
+        st.warning(
+            "Aucune range chargée. Merci de fournir un fichier JSON dans la colonne de gauche."
+        )
+        return
+
+    spot_key, spot = choose_random_spot(ranges_data, table_type)
+    if spot_key is None or spot is None:
+        st.warning(f"Aucun spot pour le format {table_type} dans ce fichier de ranges.")
+        return
+
+    pos = spot["position"]
+    stack = spot["stack"]
+    scenario = spot["scenario"]
+
+    deck = build_deck()
+    random.shuffle(deck)
+    c1, c2 = deck[:2]
+    hand_code = canonical_from_cards(c1, c2)
+
+    def colorize(card):
+        suit = card[-1]
+        color = "#DC2626" if suit in {"♥", "♦"} else "#111827"
+        return f"<span style='color:{color}'>{card}</span>"
+
+    h_html = f"{colorize(c1)}&nbsp;&nbsp;{colorize(c2)}"
+
+    scen_label = scenario_pretty_label(scenario)
+    extra = ""
+    if scenario.startswith("vs_open_"):
+        vil = scenario[len("vs_open_") :]
+        extra = f"Open de {vil}"
+
+    correct = get_correct_actions_for_hand(spot, hand_code)
+
+    st.session_state.current_pos = pos
+    st.session_state.current_stack = stack
+    st.session_state.current_hand_html = h_html
+    st.session_state.current_extra = extra
+    st.session_state.current_scenario_label = scen_label
+    st.session_state.current_cards = (c1, c2)
+    st.session_state.current_spot_key = spot_key
+    st.session_state.current_hand_code = hand_code
+    st.session_state.current_correct_actions = correct
+    st.session_state.show_correction = False
+    st.session_state.last_result = None
+
+# -----------------------------
+# Initialisation de la première main
+# (et quand on change de mode)
+# -----------------------------
+if mode_jeu == "Libre (sans ranges)":
+    if st.session_state.current_mode != "LIBRE" or st.session_state.current_pos is None:
+        do_roll_free()
+    st.session_state.current_mode = "LIBRE"
 else:
-    st.session_state.ranges_data = {}
+    if (
+        st.session_state.current_mode != "RANGES"
+        or st.session_state.current_spot_key is None
+    ):
+        do_roll_range()
+    st.session_state.current_mode = "RANGES"
 
 # -----------------------------
 # Affichage du spot courant
@@ -595,81 +682,6 @@ if mode_jeu == "Avec ranges de correction" and st.session_state.current_spot_key
     st.caption(f"Spot : `{st.session_state.current_spot_key}`")
 
 st.markdown("---")
-
-# -----------------------------
-# Fonctions de tirage
-# -----------------------------
-def do_roll_free():
-    pos, stack, h_html, extra, scen_label, cards = roll_free(
-        weights, selected_stack, table_type
-    )
-    st.session_state.current_case = (pos, stack)
-    st.session_state.current_pos = pos
-    st.session_state.current_stack = stack
-    st.session_state.current_hand_html = h_html
-    st.session_state.current_extra = extra
-    st.session_state.current_scenario_label = scen_label
-    st.session_state.current_cards = cards
-    st.session_state.show_correction = False
-    st.session_state.last_result = None
-
-
-def do_roll_range():
-    ranges_data = st.session_state.ranges_data
-    if not ranges_data:
-        st.warning(
-            "Aucune range chargée. Merci de fournir un fichier JSON dans la colonne de gauche."
-        )
-        return
-
-    spot_key, spot = choose_random_spot(ranges_data, table_type)
-    if spot_key is None or spot is None:
-        st.warning(f"Aucun spot pour le format {table_type} dans ce fichier de ranges.")
-        return
-
-    pos = spot["position"]
-    stack = spot["stack"]
-    scenario = spot["scenario"]
-
-    deck = build_deck()
-    random.shuffle(deck)
-    c1, c2 = deck[:2]
-    hand_code = canonical_from_cards(c1, c2)
-
-    def colorize(card):
-        suit = card[-1]
-        color = "#DC2626" if suit in {"♥", "♦"} else "#111827"
-        return f"<span style='color:{color}'>{card}</span>"
-
-    h_html = f"{colorize(c1)}&nbsp;&nbsp;{colorize(c2)}"
-
-    scen_label = scenario_pretty_label(scenario)
-    extra = ""
-    if scenario.startswith("vs_open_"):
-        vil = scenario[len("vs_open_") :]
-        extra = f"Open de {vil}"
-
-    correct = get_correct_actions_for_hand(spot, hand_code)
-
-    st.session_state.current_pos = pos
-    st.session_state.current_stack = stack
-    st.session_state.current_hand_html = h_html
-    st.session_state.current_extra = extra
-    st.session_state.current_scenario_label = scen_label
-    st.session_state.current_cards = (c1, c2)
-    st.session_state.current_spot_key = spot_key
-    st.session_state.current_hand_code = hand_code
-    st.session_state.current_correct_actions = correct
-    st.session_state.show_correction = False
-    st.session_state.last_result = None
-
-
-# Première main si rien
-if st.session_state.current_pos is None:
-    if mode_jeu == "Libre (sans ranges)":
-        do_roll_free()
-    else:
-        do_roll_range()
 
 # -----------------------------
 # Interaction selon le mode
@@ -738,7 +750,7 @@ else:
             rs["errors_by_stack"][stack] += 1
             rs["errors_by_hand"][hand_code] += 1
             st.session_state.show_correction = True
-            st.session_state.last_correction_spot = st.session_state.ranges_data.get(
+            st.session_state.last_correction_spot = ranges_data.get(
                 st.session_state.current_spot_key
             )
             st.session_state.last_correction_hand = hand_code
@@ -746,14 +758,15 @@ else:
 
         st.session_state.range_stats = rs
 
+    # IMPORTANT : ici on ne tire PAS de nouvelle main,
+    # on se contente d'évaluer par rapport au spot courant
     for act_key, pressed in actions_clicked.items():
         if pressed:
             handle_answer(act_key)
             break
 
+    # Le changement de main ne se fait QUE ici :
     if clicked_new_range:
-        st.session_state.show_correction = False
-        st.session_state.last_result = None
         do_roll_range()
 
     # Feedback texte
