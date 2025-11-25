@@ -768,7 +768,11 @@ else:
 
     # Bouton pour passer à la main suivante
     if clicked_new_range:
-        do_roll_range()
+    # On repart proprement sur un nouveau spot
+    st.session_state.show_correction = False
+    st.session_state.last_result = None
+    do_roll_range()
+
 
     # Feedback textuel
     if st.session_state.last_result == "good":
