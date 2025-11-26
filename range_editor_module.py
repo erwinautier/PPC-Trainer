@@ -122,10 +122,25 @@ ALL_HANDS = all_hands_set()
 # -----------------------------
 def spots_from_exported_data(data: dict) -> dict:
     """
-    Convertit un JSON de ranges exporté (format {version, spots})
-    en structure interne : spot_key -> { ... , "hand_actions": {hand: set(actions)} }.
+    Convertit un JSON de ranges exporté en structure interne :
+    spot_key -> { table_type, position, stack, scenario, hand_actions:{hand:set(actions)} }
+
+    On accepte deux formats :
+    1) {"version":2, "spots":{...}}
+    2) {"spot_key1": {...}, "spot_key2": {...}} (sans clé "spots")
     """
-    spots_json = data.get("spots", {})
+    # Cas 1 : format avec clé "spots"
+    if "spots" in data and isinstance(data["spots"], dict):
+        spots_json = data["spots"]
+    else:
+        # Cas 2 : on suppose que data EST directement le dict de spots
+        # (on vérifie grossièrement que les valeurs ressemblent à des spots)
+        if any(isinstance(v, dict) and "position" in v for v in data.values()):
+            spots_json = data
+        else:
+            # Format inconnu
+            return {}
+
     new_spots = {}
     for old_key, spot in spots_json.items():
         pos = spot.get("position")
@@ -194,7 +209,6 @@ def update_hand_action(spot_key: str, hand_code: str):
     st.session_state.spots = spots
 
     # 🔁 IMPORTANT : on relance immédiatement le script
-    # pour que la grille se mette à jour avec la nouvelle puce.
     st.rerun()
 
 
@@ -226,15 +240,13 @@ def run_range_editor(username: str):
     # -----------------------------------------------------
     # État en session
     # -----------------------------------------------------
-    # On associe les spots à l'utilisateur courant (pour éviter un mélange entre users)
     if "range_editor_user" not in st.session_state:
         st.session_state.range_editor_user = username
     elif st.session_state.range_editor_user != username:
-        # on change d'utilisateur : on réinitialise les spots
         st.session_state.range_editor_user = username
         st.session_state.spots = {}
 
-    # Chargement initial depuis le fichier ranges_{username}.json si pas encore fait
+    # Chargement initial depuis ranges_{username}.json (une seule fois)
     if "spots" not in st.session_state:
         st.session_state.spots = {}
         user_path = user_ranges_path(username)
@@ -242,20 +254,25 @@ def run_range_editor(username: str):
             try:
                 with open(user_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                st.session_state.spots = spots_from_exported_data(data)
-                st.info("Ranges perso chargées depuis le fichier utilisateur.")
+                new_spots = spots_from_exported_data(data)
+                st.session_state.spots = new_spots
+                if new_spots:
+                    st.info(f"Ranges perso chargées : {len(new_spots)} spots trouvés.")
+                    # Se placer sur le premier spot disponible
+                    first_key = sorted(new_spots.keys())[0]
+                    t, p, s_str, scen = first_key.split("_", 4)
+                    st.session_state.table_type = t
+                    st.session_state.scenario = scen
+                    st.session_state.current_spot_key = first_key
             except Exception as e:
                 st.warning(f"Impossible de charger les ranges perso : {e}")
 
     if "current_spot_key" not in st.session_state:
         st.session_state.current_spot_key = None
-
     if "current_action" not in st.session_state:
         st.session_state.current_action = "open"
-
     if "table_type" not in st.session_state:
         st.session_state.table_type = "6-max"
-
     if "scenario" not in st.session_state:
         st.session_state.scenario = "open"
 
@@ -271,13 +288,29 @@ def run_range_editor(username: str):
         try:
             data = json.load(uploaded)
             new_spots = spots_from_exported_data(data)
-            st.session_state.spots = new_spots
-            st.sidebar.success("Fichier de ranges chargé avec succès ✅")
+            if not new_spots:
+                st.sidebar.error(
+                    "Fichier lu mais aucun spot reconnu. "
+                    "Vérifie qu'il contient bien un objet 'spots' ou des clés de spots."
+                )
+            else:
+                st.session_state.spots = new_spots
+                # Se placer sur le premier spot importé
+                first_key = sorted(new_spots.keys())[0]
+                t, p, s_str, scen = first_key.split("_", 4)
+                st.session_state.table_type = t
+                st.session_state.scenario = scen
+                st.session_state.current_spot_key = first_key
+                st.sidebar.success(
+                    f"Fichier de ranges chargé avec succès ✅ ({len(new_spots)} spots)"
+                )
+                st.rerun()
         except Exception as e:
             st.sidebar.error(f"Erreur de lecture du fichier : {e}")
 
     if st.sidebar.button("🗑️ Effacer toutes les ranges de la session"):
         st.session_state.spots = {}
+        st.session_state.current_spot_key = None
         st.sidebar.success("Toutes les ranges ont été effacées (dans la session).")
 
     # Préparation export JSON (cases vides -> fold)
@@ -312,7 +345,7 @@ def run_range_editor(username: str):
     export_data = {"version": 2, "spots": export_spots}
     export_json = json.dumps(export_data, indent=2)
 
-    # Sauvegarde automatique dans le fichier ranges_{username}.json
+    # Sauvegarde automatique dans ranges_{username}.json
     user_path = user_ranges_path(username)
     try:
         with open(user_path, "w", encoding="utf-8") as f:
@@ -351,7 +384,6 @@ def run_range_editor(username: str):
     with col_sel2:
         stack = st.selectbox("Stack (BB)", STACKS, index=0)
 
-    # Scénarios dépendants de la position (open + vs_open_X pour tous les X avant)
     pos_index = positions_list.index(position)
     previous_positions = positions_list[:pos_index]
     available_scenarios = ["open"] + [f"vs_open_{p}" for p in previous_positions]
@@ -403,7 +435,6 @@ def run_range_editor(username: str):
         if copy_from_key != "(Aucune)" and copy_from_key in st.session_state.spots:
             src_spot = st.session_state.spots[copy_from_key]
             src_actions = src_spot.get("hand_actions", {})
-            # deep copy des sets
             hand_actions = {h: set(acts) for h, acts in src_actions.items()}
             current_spot["hand_actions"] = hand_actions
             st.session_state.spots[spot_key] = current_spot
@@ -447,7 +478,6 @@ def run_range_editor(username: str):
     # -----------------------------------------------------
     st.subheader("🧩 Grille des mains")
 
-    # En-tête colonnes
     header_cols = st.columns(len(RANKS) + 1)
     header_cols[0].markdown(" ")
     for j, r2 in enumerate(RANKS):
@@ -480,7 +510,6 @@ def run_range_editor(username: str):
                 args=(spot_key, hand_code),
             )
 
-    # remettre le spot modifié en session
     current_spot["hand_actions"] = st.session_state.spots.get(spot_key, current_spot)[
         "hand_actions"
     ]
@@ -496,7 +525,6 @@ def run_range_editor(username: str):
     st.markdown("---")
     st.subheader("📊 Statistiques d'un spot (pondérées en combos)")
 
-    # Total de combos possibles sur 52 cartes = 1326
     TOTAL_COMBOS = sum(hand_weight(h) for h in ALL_HANDS)
 
     if not st.session_state.spots:
@@ -521,7 +549,6 @@ def run_range_editor(username: str):
         scen = spot["scenario"]
         ha = spot.get("hand_actions", {})
 
-        # Comptes pondérés en combos
         combo_counts = defaultdict(int)
 
         for h in ALL_HANDS:
@@ -530,13 +557,10 @@ def run_range_editor(username: str):
             if not acts:
                 combo_counts["fold"] += w
             else:
-                # Open-like = open ou open_shove
                 if "open" in acts or "open_shove" in acts:
                     combo_counts["open_like"] += w
-                # 3bet-like = threebet ou threebet_shove
                 if "threebet" in acts or "threebet_shove" in acts:
                     combo_counts["threebet_like"] += w
-                # Call
                 if "call" in acts:
                     combo_counts["call"] += w
 
