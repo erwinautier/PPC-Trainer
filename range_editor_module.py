@@ -97,7 +97,6 @@ def hand_weight(hand: str) -> int:
     """
     hand = hand.strip().upper()
     if len(hand) == 2:
-        # Paires, ex : "AA"
         return 6
     if len(hand) == 3:
         if hand.endswith("S"):
@@ -193,6 +192,10 @@ def update_hand_action(spot_key: str, hand_code: str):
     spot["hand_actions"] = hand_actions
     spots[spot_key] = spot
     st.session_state.spots = spots
+
+    # 🔁 IMPORTANT : on relance immédiatement le script
+    # pour que la grille se mette à jour avec la nouvelle puce.
+    st.rerun()
 
 
 # =========================================================
