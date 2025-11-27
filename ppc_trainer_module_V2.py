@@ -116,7 +116,7 @@ def load_ranges_file(path: str) -> dict:
             data = json.load(f)
         if "spots" in data and isinstance(data["spots"], dict):
             return data
-        # Cas bizarre : on tente d'interpréter data comme spots direct
+        # Cas rare : data est directement le dict de spots
         if isinstance(data, dict) and any(
             isinstance(v, dict) and "position" in v for v in data.values()
         ):
@@ -298,26 +298,23 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) 
             if h in ALL_HANDS:
                 hand_to_actions[h].add(act)
 
-    html = [
-        """
-<div style="overflow-x:auto;max-width:100%;">
-<table style="border-collapse:collapse;font-size:11px;text-align:center;margin:0 auto;">
-<thead>
-  <tr>
-    <th style='padding:4px 6px;'></th>
-"""
-    ]
-
+    html = []
+    html.append(
+        "<div style='overflow-x:auto;max-width:100%;'>"
+        "<table style='border-collapse:collapse;font-size:11px;"
+        "text-align:center;margin:0 auto;'>"
+        "<thead><tr><th style='padding:4px 6px;'></th>"
+    )
     for r in RANKS:
         html.append(
-            f"<th style='padding:4px 6px; text-align:center;'>{r}</th>"
+            f"<th style='padding:4px 6px;text-align:center;'>{r}</th>"
         )
     html.append("</tr></thead><tbody>")
 
     for i, r1 in enumerate(RANKS):
         html.append("<tr>")
         html.append(
-            f"<th style='padding:4px 6px; text-align:center;'>{r1}</th>"
+            f"<th style='padding:4px 6px;text-align:center;'>{r1}</th>"
         )
         for j, r2 in enumerate(RANKS):
             hand = canonical_hand_from_indices(i, j)
@@ -334,22 +331,17 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) 
 
             highlight_style = ""
             if hero_hand and hand.upper() == hero_hand.upper():
-                highlight_style = "background-color:#E5E7EB; border-radius:6px;"
+                highlight_style = "background-color:#E5E7EB;border-radius:6px;"
 
-            cell = f"""
-<td style="padding:2px 3px; text-align:center; {highlight_style}">
-  <div style="font-size:9px; line-height:1.1;">
-    <span style="
-        display:inline-block;
-        width:14px; height:14px;
-        border-radius:999px;
-        background-color:{color};
-        border:1px solid #D1D5DB;
-    "></span><br/>
-    <span>{hand}</span>
-  </div>
-</td>
-"""
+            cell = (
+                f"<td style='padding:2px 3px;text-align:center;{highlight_style}'>"
+                "<div style='font-size:9px;line-height:1.1;'>"
+                f"<span style='display:inline-block;width:14px;height:14px;"
+                f"border-radius:999px;background-color:{color};"
+                "border:1px solid #D1D5DB;'></span><br/>"
+                f"<span>{hand}</span>"
+                "</div></td>"
+            )
             html.append(cell)
         html.append("</tr>")
     html.append("</tbody></table></div>")
@@ -375,13 +367,13 @@ def render_hand_big_html(hand: str) -> str:
         suit2 = "♠"
         color2 = "#111827"
 
-    return f"""
-<div style="font-size:40px;font-weight:600;letter-spacing:1px;">
-  <span style="color:{color1};">{r1}{suit1}</span>
-  &nbsp;
-  <span style="color:{color2};">{r2}{suit2}</span>
-</div>
-"""
+    return (
+        "<div style='font-size:40px;font-weight:600;letter-spacing:1px;'>"
+        f"<span style='color:{color1};'>{r1}{suit1}</span>"
+        "&nbsp;"
+        f"<span style='color:{color2};'>{r2}{suit2}</span>"
+        "</div>"
+    )
 
 
 # =========================================================
@@ -398,6 +390,7 @@ def new_spot_and_hand(
     user_ranges: dict,
     stats: dict,
 ):
+    # ----- Mode libre : pas de ranges -----
     if mode == "Entraînement libre":
         if table_type == "6-max":
             positions = POSITIONS_6MAX
@@ -429,6 +422,7 @@ def new_spot_and_hand(
             "actions_for_spot": None,
         }
 
+    # ----- Mode avec ranges -----
     if ranges_source == "Ranges personnelles":
         spots = user_ranges.get("spots", {})
         if not spots:
@@ -477,6 +471,7 @@ def new_spot_and_hand(
 
 def evaluate_answer(hero_action: str, hero_hand: str, actions_for_spot: dict) -> bool:
     if actions_for_spot is None:
+        # mode libre : tout est "correct"
         return True
 
     non_fold_actions = [a for a in actions_for_spot.keys() if a != "fold"]
@@ -501,6 +496,7 @@ def evaluate_answer(hero_action: str, hero_hand: str, actions_for_spot: dict) ->
 # =========================================================
 
 def run_trainer(username: str):
+    # ----------- Initialisation état session -----------
     if "trainer_user" not in st.session_state:
         st.session_state.trainer_user = username
     elif st.session_state.trainer_user != username:
@@ -518,6 +514,7 @@ def run_trainer(username: str):
     if "last_feedback" not in st.session_state:
         st.session_state.last_feedback = None
 
+    # ----------- Chargement des ranges -----------
     default_ranges = load_ranges_file(default_ranges_path())
     user_ranges = load_ranges_file(user_ranges_path(username))
 
@@ -526,6 +523,9 @@ def run_trainer(username: str):
 
     col_left, col_right = st.columns([1, 2])
 
+    # ===============================
+    # Colonne gauche : paramètres
+    # ===============================
     with col_left:
         st.subheader("⚙️ Paramètres d'entraînement")
 
@@ -597,6 +597,9 @@ def run_trainer(username: str):
             f"- Précision : **{acc:.1f}%**"
         )
 
+    # ===============================
+    # Colonne droite : spot + actions
+    # ===============================
     with col_right:
         st.subheader("🎯 Spot actuel")
 
@@ -633,35 +636,41 @@ def run_trainer(username: str):
         hand_s = spot["hand"]
         spot_key_s = spot.get("spot_key") or "libre"
 
-        card_html = f"""
-<div style="background:#F9FAFB;border-radius:20px;padding:24px 32px;margin:8px 0 16px 0;border:1px solid #E5E7EB;">
-  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;row-gap:4px;font-size:12px;color:#6B7280;">
-    <div>
-      Format : <b>{table_type_s}</b><br/>
-      Scénario : <code>{scenario_s}</code>
-    </div>
-    <div style="text-align:right;">
-      Spot : <span style="font-family:monospace;">{spot_key_s}</span>
-    </div>
-  </div>
-  <div style="margin-top:16px;display:flex;justify-content:space-around;align-items:center;flex-wrap:wrap;row-gap:16px;">
-    <div style="text-align:center;min-width:110px;">
-      <div style="font-size:13px;color:#6B7280;">Position</div>
-      <div style="font-size:28px;font-weight:600;color:#111827;">{position_s}</div>
-    </div>
-    <div style="text-align:center;min-width:160px;">
-      <div style="font-size:13px;color:#6B7280;">Main</div>
-      {render_hand_big_html(hand_s)}
-    </div>
-    <div style="text-align:center;min-width:110px;">
-      <div style="font-size:13px;color:#6B7280;">Stack (BB)</div>
-      <div style="font-size:28px;font-weight:600;color:#111827;">{stack_s}</div>
-    </div>
-  </div>
-</div>
-"""
+        # ----- Carte visuelle -----
+        card_html = (
+            "<div style='background:#F9FAFB;border-radius:20px;"
+            "padding:24px 32px;margin:8px 0 16px 0;border:1px solid #E5E7EB;'>"
+            "<div style='display:flex;justify-content:space-between;"
+            "align-items:center;flex-wrap:wrap;row-gap:4px;font-size:12px;"
+            "color:#6B7280;'>"
+            "<div>"
+            f"Format : <b>{table_type_s}</b><br/>"
+            f"Scénario : <code>{scenario_s}</code>"
+            "</div>"
+            "<div style='text-align:right;'>"
+            f"Spot : <span style='font-family:monospace;'>{spot_key_s}</span>"
+            "</div>"
+            "</div>"
+            "<div style='margin-top:16px;display:flex;justify-content:space-around;"
+            "align-items:center;flex-wrap:wrap;row-gap:16px;'>"
+            "<div style='text-align:center;min-width:110px;'>"
+            "<div style='font-size:13px;color:#6B7280;'>Position</div>"
+            f"<div style='font-size:28px;font-weight:600;color:#111827;'>{position_s}</div>"
+            "</div>"
+            "<div style='text-align:center;min-width:160px;'>"
+            "<div style='font-size:13px;color:#6B7280;'>Main</div>"
+            f"{render_hand_big_html(hand_s)}"
+            "</div>"
+            "<div style='text-align:center;min-width:110px;'>"
+            "<div style='font-size:13px;color:#6B7280;'>Stack (BB)</div>"
+            f"<div style='font-size:28px;font-weight:600;color:#111827;'>{stack_s}</div>"
+            "</div>"
+            "</div>"
+            "</div>"
+        )
         st.markdown(card_html, unsafe_allow_html=True)
 
+        # ----- Choix d'action -----
         st.markdown("#### 🤔 Que fais-tu dans ce spot ?")
 
         actions_row1 = ["fold", "open", "call"]
@@ -677,7 +686,10 @@ def run_trainer(username: str):
             correct = evaluate_answer(action_key, hero_hand, actions_for_spot)
 
             stats = st.session_state.trainer_stats
-            if mode == "Avec ranges de correction" and current_spot["spot_key"]:
+            if (
+                mode == "Avec ranges de correction"
+                and current_spot["spot_key"]
+            ):
                 update_stats(stats, current_spot["spot_key"], success=correct)
                 save_trainer_stats(username, stats)
 
@@ -685,13 +697,22 @@ def run_trainer(username: str):
                 st.session_state.last_feedback = {
                     "correct": None,
                     "hero_action": action_key,
-                    "message": f"Tu as choisi : **{ACTION_LABELS[action_key]}** (mode libre).",
+                    "message": (
+                        f"Tu as choisi : **{ACTION_LABELS[action_key]}** "
+                        "(mode libre)."
+                    ),
                 }
             else:
                 if correct:
-                    msg = f"✅ Bonne réponse : **{ACTION_LABELS[action_key]}** pour {hero_hand}."
+                    msg = (
+                        f"✅ Bonne réponse : **{ACTION_LABELS[action_key]}** "
+                        f"pour {hero_hand}."
+                    )
                 else:
-                    msg = f"❌ Mauvaise réponse : **{ACTION_LABELS[action_key]}** pour {hero_hand}."
+                    msg = (
+                        f"❌ Mauvaise réponse : **{ACTION_LABELS[action_key]}** "
+                        f"pour {hero_hand}."
+                    )
                 st.session_state.last_feedback = {
                     "correct": correct,
                     "hero_action": action_key,
