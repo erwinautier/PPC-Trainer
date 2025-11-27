@@ -711,7 +711,7 @@ def run_trainer(username: str):
         # ----- Phrase de scénario bien visible -----
         scenario_sentence = scenario_to_sentence(table_type_s, position_s, scenario_s)
         st.markdown(
-            f"<div style='font-size:16px;font-weight:500;margin:4px 0 16px 0;'>"
+            f"<div style='font-size:20px;font-weight:500;margin:4px 0 16px 0;'>"
             f"{scenario_sentence}"
             "</div>",
             unsafe_allow_html=True,
