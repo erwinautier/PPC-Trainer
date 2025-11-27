@@ -134,7 +134,6 @@ def spots_from_exported_data(data: dict) -> dict:
         spots_json = data["spots"]
     else:
         # Cas 2 : on suppose que data EST directement le dict de spots
-        # (on vérifie grossièrement que les valeurs ressemblent à des spots)
         if any(isinstance(v, dict) and "position" in v for v in data.values()):
             spots_json = data
         else:
@@ -171,7 +170,6 @@ def update_hand_action(spot_key: str, hand_code: str):
     """Callback appelé quand on clique sur un bouton de la grille."""
     spots = st.session_state.spots
 
-    # table_type, position, stack, scenario
     table_type, position, stack_str, scenario = spot_key.split("_", 3)
     stack = int(stack_str)
 
@@ -208,17 +206,16 @@ def update_hand_action(spot_key: str, hand_code: str):
     spots[spot_key] = spot
     st.session_state.spots = spots
 
-    # 🔁 IMPORTANT : on relance immédiatement le script
-    st.rerun()
+    # Pas de st.rerun ici : le clic sur un bouton déclenche déjà un rerun.
 
 
 # =========================================================
-#  FONCTION PRINCIPALE APPELÉE PAR app.py
+#  FONCTION PRINCIPALE APPELÉE PAR l'appli globale
 # =========================================================
 def run_range_editor(username: str):
     """
     Module d'édition de ranges.
-    À appeler depuis app.py avec : run_range_editor(username)
+    À appeler depuis l'app principale avec : run_range_editor(username)
     """
 
     # -----------------------------------------------------
@@ -246,7 +243,6 @@ def run_range_editor(username: str):
         st.session_state.range_editor_user = username
         st.session_state.spots = {}
 
-    # Chargement initial depuis ranges_{username}.json (une seule fois)
     if "spots" not in st.session_state:
         st.session_state.spots = {}
         user_path = user_ranges_path(username)
@@ -258,9 +254,8 @@ def run_range_editor(username: str):
                 st.session_state.spots = new_spots
                 if new_spots:
                     st.info(f"Ranges perso chargées : {len(new_spots)} spots trouvés.")
-                    # Se placer sur le premier spot disponible
                     first_key = sorted(new_spots.keys())[0]
-                    t, p, s_str, scen = first_key.split("_", 4)
+                    t, p, s_str, scen = first_key.split("_", 3)
                     st.session_state.table_type = t
                     st.session_state.scenario = scen
                     st.session_state.current_spot_key = first_key
@@ -275,6 +270,8 @@ def run_range_editor(username: str):
         st.session_state.table_type = "6-max"
     if "scenario" not in st.session_state:
         st.session_state.scenario = "open"
+    if "ranges_uploaded_name" not in st.session_state:
+        st.session_state.ranges_uploaded_name = None
 
     # -----------------------------------------------------
     # Sidebar : chargement / sauvegarde
@@ -285,28 +282,29 @@ def run_range_editor(username: str):
         "Charger un fichier de ranges (.json)", type=["json"]
     )
     if uploaded is not None:
-        try:
-            data = json.load(uploaded)
-            new_spots = spots_from_exported_data(data)
-            if not new_spots:
-                st.sidebar.error(
-                    "Fichier lu mais aucun spot reconnu. "
-                    "Vérifie qu'il contient bien un objet 'spots' ou des clés de spots."
-                )
-            else:
-                st.session_state.spots = new_spots
-                # Se placer sur le premier spot importé
-                first_key = sorted(new_spots.keys())[0]
-                t, p, s_str, scen = first_key.split("_", 4)
-                st.session_state.table_type = t
-                st.session_state.scenario = scen
-                st.session_state.current_spot_key = first_key
-                st.sidebar.success(
-                    f"Fichier de ranges chargé avec succès ✅ ({len(new_spots)} spots)"
-                )
-                st.rerun()
-        except Exception as e:
-            st.sidebar.error(f"Erreur de lecture du fichier : {e}")
+        # On ne traite le fichier que s'il vient de changer
+        if st.session_state.ranges_uploaded_name != uploaded.name:
+            try:
+                data = json.load(uploaded)
+                new_spots = spots_from_exported_data(data)
+                if not new_spots:
+                    st.sidebar.error(
+                        "Fichier lu mais aucun spot reconnu. "
+                        "Vérifie qu'il contient bien un objet 'spots' ou des clés de spots."
+                    )
+                else:
+                    st.session_state.spots = new_spots
+                    first_key = sorted(new_spots.keys())[0]
+                    t, p, s_str, scen = first_key.split("_", 3)
+                    st.session_state.table_type = t
+                    st.session_state.scenario = scen
+                    st.session_state.current_spot_key = first_key
+                    st.session_state.ranges_uploaded_name = uploaded.name
+                    st.sidebar.success(
+                        f"Fichier de ranges chargé avec succès ✅ ({len(new_spots)} spots)"
+                    )
+            except Exception as e:
+                st.sidebar.error(f"Erreur de lecture du fichier : {e}")
 
     if st.sidebar.button("🗑️ Effacer toutes les ranges de la session"):
         st.session_state.spots = {}
