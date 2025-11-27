@@ -197,7 +197,6 @@ def get_candidate_hands_for_spot(actions_for_spot: dict, max_distance: int = 2):
       dans la grille 13x13 de ces mains qui jouent.
     Si aucune main jouée n'est définie, renvoie ALL_HANDS (fallback).
     """
-    # 1) Mains qui jouent (≠ fold)
     non_fold_hands = set()
     for act, hands in actions_for_spot.items():
         if act == "fold":
@@ -207,10 +206,8 @@ def get_candidate_hands_for_spot(actions_for_spot: dict, max_distance: int = 2):
                 non_fold_hands.add(h)
 
     if not non_fold_hands:
-        # si aucune main ne joue, on ne filtre pas
         return set(ALL_HANDS)
 
-    # 2) Ajouter les mains à distance <= max_distance sur la grille
     candidates = set(non_fold_hands)
 
     for h in ALL_HANDS:
@@ -229,10 +226,6 @@ def get_candidate_hands_for_spot(actions_for_spot: dict, max_distance: int = 2):
 
 
 def draw_hand_for_spot(actions_for_spot: dict) -> str:
-    """
-    Tire une main aléatoire parmi celles renvoyées
-    par get_candidate_hands_for_spot.
-    """
     candidates = list(get_candidate_hands_for_spot(actions_for_spot))
     if not candidates:
         candidates = list(ALL_HANDS)
@@ -250,13 +243,6 @@ def pick_spot_for_training(
     stats: dict,
     table_type_filter=None,
 ):
-    """
-    Filtre les spots disponibles en fonction :
-    - de la position choisie (ou Aléatoire),
-    - du stack choisi (ou Aléatoire),
-    - éventuellement du type de table (6-max / 8-max),
-    puis tire un spot avec une pondération en fonction des stats (fails / success).
-    """
     filtered = []
     stack_choice = None
     if stack_choice_label not in (None, "", "Aléatoire"):
@@ -274,7 +260,6 @@ def pick_spot_for_training(
 
         if table_type_filter and ttype != table_type_filter:
             continue
-
         if pos_choice not in (None, "", "Aléatoire") and pos != pos_choice:
             continue
         if stack_choice is not None and stack != stack_choice:
@@ -288,7 +273,6 @@ def pick_spot_for_training(
     if not filtered:
         return None
 
-    # Pondération style Leitner
     weights = [get_spot_weight(stats, k) for k in filtered]
     total_w = sum(weights)
     if total_w <= 0:
@@ -308,11 +292,6 @@ def pick_spot_for_training(
 # =========================================================
 
 def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) -> str:
-    """
-    Construit une grille HTML 13x13 compacte des actions pour chaque main.
-    Chaque cellule est un petit rond coloré + le texte de la main.
-    hero_hand, si fournie, est surlignée légèrement.
-    """
     hand_to_actions = defaultdict(set)
     for act, hands in actions_for_spot.items():
         for h in hands:
@@ -321,20 +300,12 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) 
 
     html = [
         """
-        <div style="
-            overflow-x:auto;
-            max-width:100%;
-        ">
-        <table style="
-            border-collapse:collapse;
-            font-size:11px;
-            text-align:center;
-            margin:0 auto;
-        ">
-        <thead>
-          <tr>
-            <th style='padding:4px 6px;'></th>
-        """
+<div style="overflow-x:auto;max-width:100%;">
+<table style="border-collapse:collapse;font-size:11px;text-align:center;margin:0 auto;">
+<thead>
+  <tr>
+    <th style='padding:4px 6px;'></th>
+"""
     ]
 
     for r in RANKS:
@@ -366,19 +337,19 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) 
                 highlight_style = "background-color:#E5E7EB; border-radius:6px;"
 
             cell = f"""
-            <td style="padding:2px 3px; text-align:center; {highlight_style}">
-              <div style="font-size:9px; line-height:1.1;">
-                <span style="
-                    display:inline-block;
-                    width:14px; height:14px;
-                    border-radius:999px;
-                    background-color:{color};
-                    border:1px solid #D1D5DB;
-                "></span><br/>
-                <span>{hand}</span>
-              </div>
-            </td>
-            """
+<td style="padding:2px 3px; text-align:center; {highlight_style}">
+  <div style="font-size:9px; line-height:1.1;">
+    <span style="
+        display:inline-block;
+        width:14px; height:14px;
+        border-radius:999px;
+        background-color:{color};
+        border:1px solid #D1D5DB;
+    "></span><br/>
+    <span>{hand}</span>
+  </div>
+</td>
+"""
             html.append(cell)
         html.append("</tr>")
     html.append("</tbody></table></div>")
@@ -390,36 +361,27 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) 
 # =========================================================
 
 def render_hand_big_html(hand: str) -> str:
-    """
-    Retourne un bloc HTML qui affiche la main en gros, avec des symboles de couleur.
-    On ne cherche pas la vraie couleur des cartes, juste un rendu lisible :
-    - première carte noire (♠)
-    - deuxième carte rouge (♥)
-    - si main suited, on force les deux en noir pour rappeler le suited
-    """
     hand = hand.upper()
     r1 = hand[0]
     r2 = hand[1]
     suffix = hand[2] if len(hand) == 3 else ""
 
-    # Par défaut : première carte noire, deuxième rouge
     suit1 = "♠"
     suit2 = "♥"
     color1 = "#111827"  # noir
     color2 = "#DC2626"  # rouge
 
-    # Si suited, on met les deux en noir
     if suffix == "S":
         suit2 = "♠"
         color2 = "#111827"
 
     return f"""
-    <div style="font-size:40px;font-weight:600;letter-spacing:1px;">
-      <span style="color:{color1};">{r1}{suit1}</span>
-      &nbsp;
-      <span style="color:{color2};">{r2}{suit2}</span>
-    </div>
-    """
+<div style="font-size:40px;font-weight:600;letter-spacing:1px;">
+  <span style="color:{color1};">{r1}{suit1}</span>
+  &nbsp;
+  <span style="color:{color2};">{r2}{suit2}</span>
+</div>
+"""
 
 
 # =========================================================
@@ -436,11 +398,6 @@ def new_spot_and_hand(
     user_ranges: dict,
     stats: dict,
 ):
-    """
-    Génère un nouveau spot + main pour le trainer.
-    Retourne un dict ou None.
-    """
-    # MODE LIBRE : pas de ranges
     if mode == "Entraînement libre":
         if table_type == "6-max":
             positions = POSITIONS_6MAX
@@ -472,7 +429,6 @@ def new_spot_and_hand(
             "actions_for_spot": None,
         }
 
-    # MODE AVEC RANGES
     if ranges_source == "Ranges personnelles":
         spots = user_ranges.get("spots", {})
         if not spots:
@@ -520,12 +476,7 @@ def new_spot_and_hand(
 # =========================================================
 
 def evaluate_answer(hero_action: str, hero_hand: str, actions_for_spot: dict) -> bool:
-    """
-    Renvoie True si la réponse est conforme à la range de correction.
-    - fold est correct si la main n'a aucune action non-fold.
-    """
     if actions_for_spot is None:
-        # mode libre : tout est "correct"
         return True
 
     non_fold_actions = [a for a in actions_for_spot.keys() if a != "fold"]
@@ -550,12 +501,6 @@ def evaluate_answer(hero_action: str, hero_hand: str, actions_for_spot: dict) ->
 # =========================================================
 
 def run_trainer(username: str):
-    """
-    Interface d'entraînement.
-    À appeler depuis l'app globale : run_trainer(username)
-    """
-
-    # ----------- Initialisation état session -----------
     if "trainer_user" not in st.session_state:
         st.session_state.trainer_user = username
     elif st.session_state.trainer_user != username:
@@ -573,21 +518,17 @@ def run_trainer(username: str):
     if "last_feedback" not in st.session_state:
         st.session_state.last_feedback = None
 
-    # ----------- Chargement des ranges (défaut / perso) -----------
     default_ranges = load_ranges_file(default_ranges_path())
     user_ranges = load_ranges_file(user_ranges_path(username))
 
     st.markdown(f"*Trainer – profil **{username}***")
     st.markdown("### 🧠 Poker Trainer – Ranges & Leitner")
 
-    # ----------- Layout global -----------
     col_left, col_right = st.columns([1, 2])
 
-    # ----------- Colonne de gauche : configuration -----------
     with col_left:
         st.subheader("⚙️ Paramètres d'entraînement")
 
-        # 1) Mode d'entraînement
         mode = st.radio(
             "Mode d'entraînement",
             ["Entraînement libre", "Avec ranges de correction"],
@@ -595,7 +536,6 @@ def run_trainer(username: str):
             key="trainer_mode",
         )
 
-        # 2) Format de table
         table_type = st.radio(
             "Format de table",
             ["6-max", "8-max"],
@@ -609,7 +549,6 @@ def run_trainer(username: str):
         else:
             positions_list = POSITIONS_8MAX
 
-        # 3) Position & stack (avec option Aléatoire)
         pos_choice = st.selectbox(
             "Position (ou Aléatoire)",
             ["Aléatoire"] + positions_list,
@@ -624,7 +563,6 @@ def run_trainer(username: str):
             key="trainer_stack_choice",
         )
 
-        # 4) Source des ranges (utile seulement si mode correction)
         ranges_source = st.radio(
             "Source des ranges (mode correction)",
             ["Ranges par défaut", "Ranges personnelles"],
@@ -659,7 +597,6 @@ def run_trainer(username: str):
             f"- Précision : **{acc:.1f}%**"
         )
 
-    # ----------- Colonne de droite : Spot + actions -----------
     with col_right:
         st.subheader("🎯 Spot actuel")
 
@@ -696,62 +633,33 @@ def run_trainer(username: str):
         hand_s = spot["hand"]
         spot_key_s = spot.get("spot_key") or "libre"
 
-        # Carte grise centrée avec position / main / stack
         card_html = f"""
-        <div style="
-            background:#F9FAFB;
-            border-radius:20px;
-            padding:24px 32px;
-            margin:8px 0 16px 0;
-            border:1px solid #E5E7EB;
-        ">
-          <div style="
-              display:flex;
-              justify-content:space-between;
-              align-items:center;
-              flex-wrap:wrap;
-              row-gap:4px;
-              font-size:12px;
-              color:#6B7280;
-          ">
-            <div>
-              Format : <b>{table_type_s}</b><br/>
-              Scénario : <code>{scenario_s}</code>
-            </div>
-            <div style="text-align:right;">
-              Spot : <span style="font-family:monospace;">{spot_key_s}</span>
-            </div>
-          </div>
-
-          <div style="
-              margin-top:16px;
-              display:flex;
-              justify-content:space-around;
-              align-items:center;
-              flex-wrap:wrap;
-              row-gap:16px;
-          ">
-            <div style="text-align:center;min-width:110px;">
-              <div style="font-size:13px;color:#6B7280;">Position</div>
-              <div style="font-size:28px;font-weight:600;color:#111827;">
-                {position_s}
-              </div>
-            </div>
-
-            <div style="text-align:center;min-width:160px;">
-              <div style="font-size:13px;color:#6B7280;">Main</div>
-              {render_hand_big_html(hand_s)}
-            </div>
-
-            <div style="text-align:center;min-width:110px;">
-              <div style="font-size:13px;color:#6B7280;">Stack (BB)</div>
-              <div style="font-size:28px;font-weight:600;color:#111827;">
-                {stack_s}
-              </div>
-            </div>
-          </div>
-        </div>
-        """
+<div style="background:#F9FAFB;border-radius:20px;padding:24px 32px;margin:8px 0 16px 0;border:1px solid #E5E7EB;">
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;row-gap:4px;font-size:12px;color:#6B7280;">
+    <div>
+      Format : <b>{table_type_s}</b><br/>
+      Scénario : <code>{scenario_s}</code>
+    </div>
+    <div style="text-align:right;">
+      Spot : <span style="font-family:monospace;">{spot_key_s}</span>
+    </div>
+  </div>
+  <div style="margin-top:16px;display:flex;justify-content:space-around;align-items:center;flex-wrap:wrap;row-gap:16px;">
+    <div style="text-align:center;min-width:110px;">
+      <div style="font-size:13px;color:#6B7280;">Position</div>
+      <div style="font-size:28px;font-weight:600;color:#111827;">{position_s}</div>
+    </div>
+    <div style="text-align:center;min-width:160px;">
+      <div style="font-size:13px;color:#6B7280;">Main</div>
+      {render_hand_big_html(hand_s)}
+    </div>
+    <div style="text-align:center;min-width:110px;">
+      <div style="font-size:13px;color:#6B7280;">Stack (BB)</div>
+      <div style="font-size:28px;font-weight:600;color:#111827;">{stack_s}</div>
+    </div>
+  </div>
+</div>
+"""
         st.markdown(card_html, unsafe_allow_html=True)
 
         st.markdown("#### 🤔 Que fais-tu dans ce spot ?")
