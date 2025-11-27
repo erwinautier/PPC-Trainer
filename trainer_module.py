@@ -64,7 +64,7 @@ def trainer_stats_path(username: str) -> str:
 
 def canonical_hand_from_indices(i: int, j: int) -> str:
     """
-    Même convention que dans l'éditeur :
+    Convention identique à l'éditeur :
     - diagonale : paires (AA, KK, ...)
     - triangle supérieur : suited (AKs, AQs, ...)
     - triangle inférieur : offsuit (AKo, AQo, ...)
@@ -311,7 +311,7 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) 
     """
     Construit une grille HTML 13x13 compacte des actions pour chaque main.
     Chaque cellule est un petit rond coloré + le texte de la main.
-    hero_hand, si fourni, est surlignée légèrement.
+    hero_hand, si fournie, est surlignée légèrement.
     """
     hand_to_actions = defaultdict(set)
     for act, hands in actions_for_spot.items():
@@ -439,13 +439,11 @@ def new_spot_and_hand(
     if ranges_source == "Ranges personnelles":
         spots = user_ranges.get("spots", {})
         if not spots:
-            # fallback sur défaut
             spots = default_ranges.get("spots", {})
     else:
         spots = default_ranges.get("spots", {})
 
     if not spots:
-        # Pas de ranges disponibles -> fallback sur mode libre
         return None
 
     available_spot_keys = list(spots.keys())
@@ -493,7 +491,6 @@ def evaluate_answer(hero_action: str, hero_hand: str, actions_for_spot: dict) ->
         # mode libre : tout est "correct"
         return True
 
-    # Ensemble des mains qui jouent (≠ fold)
     non_fold_actions = [a for a in actions_for_spot.keys() if a != "fold"]
     non_fold_hands = set()
     for act in non_fold_actions:
@@ -543,7 +540,7 @@ def run_trainer(username: str):
     default_ranges = load_ranges_file(default_ranges_path())
     user_ranges = load_ranges_file(user_ranges_path(username))
 
-    # Petit récap en tout petit pour debug
+    # Mini info debug
     st.caption(
         f"Ranges défaut : {len(default_ranges.get('spots', {}))} spots | "
         f"Ranges perso : {len(user_ranges.get('spots', {}))} spots"
@@ -552,12 +549,22 @@ def run_trainer(username: str):
     st.markdown(f"*Trainer – profil **{username}***")
     st.markdown("### 🧠 Poker Trainer – Ranges & Leitner")
 
-    # ----------- Colonne de gauche : configuration -----------
+    # ----------- Layout global -----------
     col_left, col_right = st.columns([1, 2])
 
+    # ----------- Colonne de gauche : configuration -----------
     with col_left:
         st.subheader("⚙️ Paramètres")
 
+        # 1) Mode d'entraînement
+        mode = st.radio(
+            "Mode d'entraînement",
+            ["Entraînement libre", "Avec ranges de correction"],
+            index=1,
+            key="trainer_mode",
+        )
+
+        # 2) Format de table
         table_type = st.radio(
             "Format de table",
             ["6-max", "8-max"],
@@ -571,29 +578,24 @@ def run_trainer(username: str):
         else:
             positions_list = POSITIONS_8MAX
 
+        # 3) Position & stack (avec option Aléatoire)
         pos_choice = st.selectbox(
-            "Position",
+            "Position (ou Aléatoire)",
             ["Aléatoire"] + positions_list,
             index=0,
             key="trainer_pos_choice",
         )
 
         stack_choice_label = st.selectbox(
-            "Stack (BB)",
+            "Stack (BB) (ou Aléatoire)",
             ["Aléatoire"] + [str(s) for s in STACKS],
             index=0,
             key="trainer_stack_choice",
         )
 
-        mode = st.radio(
-            "Mode d'entraînement",
-            ["Entraînement libre", "Avec ranges de correction"],
-            index=1,
-            key="trainer_mode",
-        )
-
+        # 4) Source des ranges (utile seulement si mode correction)
         ranges_source = st.radio(
-            "Source des ranges",
+            "Source des ranges (mode correction)",
             ["Ranges par défaut", "Ranges personnelles"],
             index=0,
             key="trainer_ranges_source",
@@ -612,6 +614,7 @@ def run_trainer(username: str):
                         "Aucune range par défaut trouvée. "
                         "Le mode 'Avec ranges de correction' ne pourra pas fonctionner."
                     )
+
         st.markdown("---")
         stats = st.session_state.trainer_stats
         total_s = stats["total"]["success"]
@@ -641,8 +644,6 @@ def run_trainer(username: str):
                 stats=st.session_state.trainer_stats,
             )
             if new_spot is None:
-                # Si on voulait être en mode correction mais qu'il n'y a pas de ranges,
-                # on bascule en mode libre pour ne pas "ne rien faire".
                 st.warning(
                     "Impossible de générer un spot avec les ranges (aucun spot trouvé). "
                     "Tu peux passer en 'Entraînement libre'."
