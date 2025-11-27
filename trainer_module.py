@@ -517,7 +517,7 @@ def run_trainer(username: str):
     Interface d'entraînement.
     À appeler depuis app.py : run_trainer(username)
     """
-
+    st.info("Trainer v2 – debug : module trainer_module.py chargé ✅")
     # ----------- Initialisation état session -----------
     if "trainer_user" not in st.session_state:
         st.session_state.trainer_user = username
