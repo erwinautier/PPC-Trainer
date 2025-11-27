@@ -71,7 +71,7 @@ def check_login(username, pwd):
 # Import des modules enfant
 # =========================================================
 try:
-    from trainer_module import run_trainer
+    from ppc_trainer_module import run_trainer
 except ImportError:
     run_trainer = None
 
