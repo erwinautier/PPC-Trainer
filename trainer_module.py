@@ -29,7 +29,7 @@ ACTION_LABELS = {
     "threebet_shove": "3-bet shove",
 }
 ACTION_COLORS = {
-    "fold": "#FFFFFF",          # fond blanc (si tu veux afficher les folds)
+    "fold": "#FFFFFF",          # fond blanc
     "open": "#16A34A",          # vert
     "call": "#FBBF24",          # jaune/orangé
     "threebet": "#EF4444",      # rouge
@@ -106,8 +106,8 @@ for i in range(len(RANKS)):
 
 def load_ranges_file(path: str) -> dict:
     """
-    Charge un fichier de ranges au format {version, spots} ou retourne
-    {"spots": {}} en cas de souci.
+    Charge un fichier de ranges au format {version, spots}
+    ou retourne {"version": 2, "spots": {}} en cas de souci.
     """
     if not os.path.exists(path):
         return {"version": 2, "spots": {}}
@@ -117,7 +117,9 @@ def load_ranges_file(path: str) -> dict:
         if "spots" in data and isinstance(data["spots"], dict):
             return data
         # Cas bizarre : on tente d'interpréter data comme spots direct
-        if any(isinstance(v, dict) and "position" in v for v in data.values()):
+        if isinstance(data, dict) and any(
+            isinstance(v, dict) and "position" in v for v in data.values()
+        ):
             return {"version": 2, "spots": data}
     except Exception:
         pass
@@ -179,7 +181,6 @@ def get_spot_weight(stats: dict, spot_key: str) -> float:
     s = stats.get("spots", {}).get(spot_key, {"success": 0, "fail": 0})
     fail = s.get("fail", 0)
     success = s.get("success", 0)
-    # Poids = 1 + fails - 0.3 * success, borné à min 0.2
     w = 1.0 + fail - 0.3 * success
     return max(w, 0.2)
 
@@ -205,8 +206,8 @@ def get_candidate_hands_for_spot(actions_for_spot: dict, max_distance: int = 2):
             if h in ALL_HANDS:
                 non_fold_hands.add(h)
 
-    # Si rien n'est défini, on ne peut pas filtrer intelligemment
     if not non_fold_hands:
+        # si aucune main ne joue, on ne filtre pas
         return set(ALL_HANDS)
 
     # 2) Ajouter les mains à distance <= max_distance sur la grille
@@ -247,7 +248,7 @@ def pick_spot_for_training(
     pos_choice: str,
     stack_choice_label: str,
     stats: dict,
-    table_type_filter: str | None = None,
+    table_type_filter=None,
 ):
     """
     Filtre les spots disponibles en fonction :
@@ -287,7 +288,7 @@ def pick_spot_for_training(
     if not filtered:
         return None
 
-    # Pondération style Leitner : plus d'erreurs -> plus de poids
+    # Pondération style Leitner
     weights = [get_spot_weight(stats, k) for k in filtered]
     total_w = sum(weights)
     if total_w <= 0:
@@ -306,23 +307,18 @@ def pick_spot_for_training(
 #  Rendu de la range de correction (grille HTML compacte)
 # =========================================================
 
-def render_correction_range_html(actions_for_spot: dict, hero_hand: str | None = None) -> str:
+def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) -> str:
     """
     Construit une grille HTML 13x13 compacte des actions pour chaque main.
     Chaque cellule est un petit rond coloré + le texte de la main.
     hero_hand, si fourni, est surlignée légèrement.
     """
-    # Prépare un mapping main -> action(s) (sans fold implicite)
     hand_to_actions = defaultdict(set)
     for act, hands in actions_for_spot.items():
         for h in hands:
             if h in ALL_HANDS:
                 hand_to_actions[h].add(act)
 
-    # Si fold est explicitement présent, on l'inclut, sinon non (fold implicite)
-    # Pour la couleur, on choisit :
-    # - s'il y a plusieurs actions, on prend une couleur "mix" (gris)
-    # - sinon, la couleur de l'action
     html = [
         """
         <div style="
@@ -341,7 +337,6 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str | None =
         """
     ]
 
-    # En-têtes colonnes
     for r in RANKS:
         html.append(
             f"<th style='padding:4px 6px; text-align:center;'>{r}</th>"
@@ -358,17 +353,14 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str | None =
             acts = hand_to_actions.get(hand, set())
 
             if not acts:
-                # Pas d'action définie -> on peut considérer que c'est fold
                 color = "#FFFFFF"
             else:
                 if len(acts) == 1:
                     act = list(acts)[0]
                     color = ACTION_COLORS.get(act, "#6B7280")
                 else:
-                    # Mix : gris
                     color = "#6B7280"
 
-            # Surlignage de la main du spot si hero_hand
             highlight_style = ""
             if hero_hand and hand.upper() == hero_hand.upper():
                 highlight_style = "background-color:#E5E7EB; border-radius:6px;"
@@ -409,19 +401,9 @@ def new_spot_and_hand(
 ):
     """
     Génère un nouveau spot + main pour le trainer.
-
-    Retourne un dict :
-    {
-      "table_type": ...,
-      "position": ...,
-      "stack": ...,
-      "scenario": ...,
-      "hand": ...,
-      "spot_key": ...,
-      "actions_for_spot": dict ou None (si mode libre)
-    }
+    Retourne un dict ou None.
     """
-    # MODE LIBRE : pas de ranges, on tire tout au hasard (ou avec filtres simples)
+    # MODE LIBRE : pas de ranges
     if mode == "Entraînement libre":
         if table_type == "6-max":
             positions = POSITIONS_6MAX
@@ -453,16 +435,17 @@ def new_spot_and_hand(
             "actions_for_spot": None,
         }
 
-    # MODE AVEC RANGES : on utilise les ranges (défaut ou perso)
+    # MODE AVEC RANGES
     if ranges_source == "Ranges personnelles":
         spots = user_ranges.get("spots", {})
-        # fallback si vide
         if not spots:
+            # fallback sur défaut
             spots = default_ranges.get("spots", {})
     else:
         spots = default_ranges.get("spots", {})
 
     if not spots:
+        # Pas de ranges disponibles -> fallback sur mode libre
         return None
 
     available_spot_keys = list(spots.keys())
@@ -484,7 +467,6 @@ def new_spot_and_hand(
     scenario = spot.get("scenario", "open")
     actions_for_spot = spot.get("actions", {})
 
-    # Tirage de la main : seulement mains qui jouent ou proches
     hand = draw_hand_for_spot(actions_for_spot)
 
     return {
@@ -508,7 +490,7 @@ def evaluate_answer(hero_action: str, hero_hand: str, actions_for_spot: dict) ->
     - fold est correct si la main n'a aucune action non-fold.
     """
     if actions_for_spot is None:
-        # mode libre : on considère tout "correct"
+        # mode libre : tout est "correct"
         return True
 
     # Ensemble des mains qui jouent (≠ fold)
@@ -521,10 +503,8 @@ def evaluate_answer(hero_action: str, hero_hand: str, actions_for_spot: dict) ->
     hero_hand_u = hero_hand.upper()
 
     if hero_action == "fold":
-        # Fold correct si la main ne fait pas partie des mains qui jouent
         return hero_hand_u not in non_fold_hands
 
-    # Sinon, on regarde si la main est dans l'action choisie
     allowed_hands = set(
         h.upper() for h in actions_for_spot.get(hero_action, [])
     )
@@ -562,6 +542,12 @@ def run_trainer(username: str):
     # ----------- Chargement des ranges (défaut / perso) -----------
     default_ranges = load_ranges_file(default_ranges_path())
     user_ranges = load_ranges_file(user_ranges_path(username))
+
+    # Petit récap en tout petit pour debug
+    st.caption(
+        f"Ranges défaut : {len(default_ranges.get('spots', {}))} spots | "
+        f"Ranges perso : {len(user_ranges.get('spots', {}))} spots"
+    )
 
     st.markdown(f"*Trainer – profil **{username}***")
     st.markdown("### 🧠 Poker Trainer – Ranges & Leitner")
@@ -613,20 +599,19 @@ def run_trainer(username: str):
             key="trainer_ranges_source",
         )
 
-        # Info sur les ranges perso
-        if ranges_source == "Ranges personnelles":
-            if not user_ranges.get("spots"):
-                st.warning(
-                    "Aucune range personnelle trouvée. "
-                    "Les ranges par défaut seront utilisées à la place."
-                )
-        else:
-            if not default_ranges.get("spots"):
-                st.warning(
-                    "Aucune range par défaut trouvée. "
-                    "Le mode correction sera limité."
-                )
-
+        if mode == "Avec ranges de correction":
+            if ranges_source == "Ranges personnelles":
+                if not user_ranges.get("spots"):
+                    st.warning(
+                        "Aucune range personnelle trouvée. "
+                        "Les ranges par défaut seront utilisées si disponibles."
+                    )
+            else:
+                if not default_ranges.get("spots"):
+                    st.error(
+                        "Aucune range par défaut trouvée. "
+                        "Le mode 'Avec ranges de correction' ne pourra pas fonctionner."
+                    )
         st.markdown("---")
         stats = st.session_state.trainer_stats
         total_s = stats["total"]["success"]
@@ -644,7 +629,6 @@ def run_trainer(username: str):
     with col_right:
         st.subheader("🎯 Spot actuel")
 
-        # Bouton "Nouvelle main"
         if st.button("🔁 Nouvelle main"):
             new_spot = new_spot_and_hand(
                 mode=mode,
@@ -657,9 +641,11 @@ def run_trainer(username: str):
                 stats=st.session_state.trainer_stats,
             )
             if new_spot is None:
-                st.error(
-                    "Impossible de générer un spot. "
-                    "Vérifie que des ranges existent pour ce format."
+                # Si on voulait être en mode correction mais qu'il n'y a pas de ranges,
+                # on bascule en mode libre pour ne pas "ne rien faire".
+                st.warning(
+                    "Impossible de générer un spot avec les ranges (aucun spot trouvé). "
+                    "Tu peux passer en 'Entraînement libre'."
                 )
             else:
                 st.session_state.current_spot = new_spot
@@ -671,7 +657,6 @@ def run_trainer(username: str):
             st.info("Clique sur **Nouvelle main** pour commencer.")
             return
 
-        # Affichage du spot
         table_type_s = spot["table_type"]
         position_s = spot["position"]
         stack_s = spot["stack"]
@@ -689,7 +674,6 @@ def run_trainer(username: str):
         st.markdown("---")
         st.markdown("#### 🤔 Que fais-tu dans ce spot ?")
 
-        # Réponse de l'utilisateur
         actions_row1 = ["fold", "open", "call"]
         actions_row2 = ["threebet", "open_shove", "threebet_shove"]
 
@@ -702,14 +686,12 @@ def run_trainer(username: str):
 
             correct = evaluate_answer(action_key, hero_hand, actions_for_spot)
 
-            # Mise à jour stats si on est en mode ranges de correction
             stats = st.session_state.trainer_stats
             if mode == "Avec ranges de correction" and current_spot["spot_key"]:
                 update_stats(stats, current_spot["spot_key"], success=correct)
                 save_trainer_stats(username, stats)
 
             if mode == "Entraînement libre":
-                # En libre, on ne juge pas vraiment, on enregistre juste l'action choisie
                 st.session_state.last_feedback = {
                     "correct": None,
                     "hero_action": action_key,
@@ -726,21 +708,18 @@ def run_trainer(username: str):
                     "message": msg,
                 }
 
-        # Ligne 1
         c1, c2, c3 = st.columns(3)
         for col, act in zip((c1, c2, c3), actions_row1):
             with col:
                 if st.button(ACTION_LABELS[act], key=f"btn_{act}"):
                     on_answer(act)
 
-        # Ligne 2
         c4, c5, c6 = st.columns(3)
         for col, act in zip((c4, c5, c6), actions_row2):
             with col:
                 if st.button(ACTION_LABELS[act], key=f"btn_{act}"):
                     on_answer(act)
 
-        # Affichage du feedback + range de correction si erreur
         fb = st.session_state.last_feedback
         if fb is not None:
             st.markdown("---")
@@ -751,7 +730,6 @@ def run_trainer(username: str):
             else:
                 st.info(fb["message"])
 
-            # Range de correction seulement si on est en mode correction et qu'il y a une erreur
             if (
                 mode == "Avec ranges de correction"
                 and fb["correct"] is False
