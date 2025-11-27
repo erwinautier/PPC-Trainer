@@ -343,7 +343,7 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) 
 
             highlight_style = ""
             if hero_hand and hand.upper() == hero_hand.upper():
-                highlight_style = "background-color:#E5E7EB;border-radius:4px;"
+                highlight_style = "background-color:#FF9499;border-radius:4px;"
 
             cell = (
                 f"<td style='padding:1px;width:32px;height:32px;"
