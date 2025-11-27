@@ -508,6 +508,39 @@ def evaluate_answer(hero_action: str, hero_hand: str, actions_for_spot: dict) ->
     return hero_hand_u in allowed_hands
 
 
+
+def render_hand_big_html(hand: str) -> str:
+    """
+    Retourne un bloc HTML qui affiche la main en gros, avec des symboles de couleur.
+    On ne cherche pas la "vraie" couleur des cartes, juste un rendu lisible :
+    - première carte noire (♠)
+    - deuxième carte rouge (♥)
+    - si main suited, on force les deux en noir pour rappeler le suited
+    """
+    hand = hand.upper()
+    r1 = hand[0]
+    r2 = hand[1]
+    suffix = hand[2] if len(hand) == 3 else ""
+
+    # Par défaut : première carte noire, deuxième rouge
+    suit1 = "♠"
+    suit2 = "♥"
+    color1 = "#111827"  # noir
+    color2 = "#DC2626"  # rouge
+
+    # Si suited, on met les deux en noir pour faire "paquet"
+    if suffix == "S":
+        suit2 = "♠"
+        color2 = "#111827"
+
+    return f"""
+    <div style="font-size:40px;font-weight:600;letter-spacing:1px;">
+      <span style="color:{color1};">{r1}{suit1}</span>
+      &nbsp;
+      <span style="color:{color2};">{r2}{suit2}</span>
+    </div>
+    """
+
 # =========================================================
 #  Fonction principale appelée par PPC-APP.py
 # =========================================================
@@ -677,7 +710,6 @@ def run_trainer(username: str):
             else:
                 st.session_state.current_spot = new_spot
                 st.session_state.last_feedback = None
-
         spot = st.session_state.current_spot
 
         if not spot:
@@ -689,17 +721,68 @@ def run_trainer(username: str):
         stack_s = spot["stack"]
         scenario_s = spot["scenario"]
         hand_s = spot["hand"]
+        spot_key_s = spot.get("spot_key") or "libre"
 
-        st.markdown(
-            f"**Format :** {table_type_s}  \n"
-            f"**Position :** {position_s}  \n"
-            f"**Stack :** {stack_s} BB  \n"
-            f"**Scénario :** `{scenario_s}`  \n"
-            f"**Main :** :spades: **{hand_s}**"
-        )
+        # Carte grise centrée avec position / main / stack
+        card_html = f"""
+        <div style="
+            background:#F9FAFB;
+            border-radius:20px;
+            padding:24px 32px;
+            margin:8px 0 16px 0;
+            border:1px solid #E5E7EB;
+        ">
+          <div style="
+              display:flex;
+              justify-content:space-between;
+              align-items:center;
+              flex-wrap:wrap;
+              row-gap:4px;
+              font-size:12px;
+              color:#6B7280;
+          ">
+            <div>
+              Format : <b>{table_type_s}</b><br/>
+              Scénario : <code>{scenario_s}</code>
+            </div>
+            <div style="text-align:right;">
+              Spot : <span style="font-family:monospace;">{spot_key_s}</span>
+            </div>
+          </div>
 
-        st.markdown("---")
+          <div style="
+              margin-top:16px;
+              display:flex;
+              justify-content:space-around;
+              align-items:center;
+              flex-wrap:wrap;
+              row-gap:16px;
+          ">
+            <div style="text-align:center;min-width:110px;">
+              <div style="font-size:13px;color:#6B7280;">Position</div>
+              <div style="font-size:28px;font-weight:600;color:#111827;">
+                {position_s}
+              </div>
+            </div>
+
+            <div style="text-align:center;min-width:160px;">
+              <div style="font-size:13px;color:#6B7280;">Main</div>
+              {render_hand_big_html(hand_s)}
+            </div>
+
+            <div style="text-align:center;min-width:110px;">
+              <div style="font-size:13px;color:#6B7280;">Stack (BB)</div>
+              <div style="font-size:28px;font-weight:600;color:#111827;">
+                {stack_s}
+              </div>
+            </div>
+          </div>
+        </div>
+        """
+        st.markdown(card_html, unsafe_allow_html=True)
+
         st.markdown("#### 🤔 Que fais-tu dans ce spot ?")
+
 
         actions_row1 = ["fold", "open", "call"]
         actions_row2 = ["threebet", "open_shove", "threebet_shove"]
