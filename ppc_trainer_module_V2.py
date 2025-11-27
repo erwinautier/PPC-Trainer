@@ -36,6 +36,15 @@ ACTION_COLORS = {
     "open_shove": "#8B5CF6",    # violet
     "threebet_shove": "#111827" # noir
 }
+# mêmes icônes que dans le range_editor
+ACTION_EMOJI = {
+    "open": "🟢",
+    "call": "🟡",
+    "threebet": "🔴",
+    "open_shove": "🟣",
+    "threebet_shove": "⚫",
+    "fold": "❌",
+}
 
 
 def base_dir():
@@ -292,6 +301,9 @@ def pick_spot_for_training(
 # =========================================================
 
 def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) -> str:
+    """
+    Grille 13x13 compacte, avec cellules carrées.
+    """
     hand_to_actions = defaultdict(set)
     for act, hands in actions_for_spot.items():
         for h in hands:
@@ -301,20 +313,20 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) 
     html = []
     html.append(
         "<div style='overflow-x:auto;max-width:100%;'>"
-        "<table style='border-collapse:collapse;font-size:11px;"
-        "text-align:center;margin:0 auto;'>"
-        "<thead><tr><th style='padding:4px 6px;'></th>"
+        "<table style='border-collapse:collapse;font-size:9px;"
+        "text-align:center;margin:0 auto;table-layout:fixed;'>"
+        "<thead><tr><th style='padding:2px 4px;'></th>"
     )
     for r in RANKS:
         html.append(
-            f"<th style='padding:4px 6px;text-align:center;'>{r}</th>"
+            f"<th style='padding:2px 4px;text-align:center;'>{r}</th>"
         )
     html.append("</tr></thead><tbody>")
 
     for i, r1 in enumerate(RANKS):
         html.append("<tr>")
         html.append(
-            f"<th style='padding:4px 6px;text-align:center;'>{r1}</th>"
+            f"<th style='padding:2px 4px;text-align:center;'>{r1}</th>"
         )
         for j, r2 in enumerate(RANKS):
             hand = canonical_hand_from_indices(i, j)
@@ -331,14 +343,17 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) 
 
             highlight_style = ""
             if hero_hand and hand.upper() == hero_hand.upper():
-                highlight_style = "background-color:#E5E7EB;border-radius:6px;"
+                highlight_style = "background-color:#E5E7EB;border-radius:4px;"
 
             cell = (
-                f"<td style='padding:2px 3px;text-align:center;{highlight_style}'>"
-                "<div style='font-size:9px;line-height:1.1;'>"
-                f"<span style='display:inline-block;width:14px;height:14px;"
+                f"<td style='padding:1px;width:32px;height:32px;"
+                f"text-align:center;{highlight_style}'>"
+                "<div style='font-size:8px;line-height:1.1;"
+                "display:flex;flex-direction:column;align-items:center;"
+                "justify-content:center;height:100%;'>"
+                f"<span style='display:inline-block;width:16px;height:16px;"
                 f"border-radius:999px;background-color:{color};"
-                "border:1px solid #D1D5DB;'></span><br/>"
+                "border:1px solid #D1D5DB;'></span>"
                 f"<span>{hand}</span>"
                 "</div></td>"
             )
@@ -374,6 +389,29 @@ def render_hand_big_html(hand: str) -> str:
         f"<span style='color:{color2};'>{r2}{suit2}</span>"
         "</div>"
     )
+
+
+# =========================================================
+#  Phrase lisible pour le scénario
+# =========================================================
+
+def scenario_to_sentence(table_type: str, position: str, scenario: str) -> str:
+    """
+    Transforme 'open', 'vs_open_HJ', 'libre', etc. en phrase lisible.
+    """
+    if scenario == "libre":
+        return "Mode libre : situation générique sans range de correction."
+
+    if scenario == "open":
+        return f"Personne n'a parlé avant toi : tu es en {position} et tu peux ouvrir le pot."
+
+    if scenario.startswith("vs_open_"):
+        vil_pos = scenario.split("_", 2)[2]
+        return (
+            f"{vil_pos} a open avant toi : tu joues en {position} face à son open."
+        )
+
+    return f"Scénario : {scenario}"
 
 
 # =========================================================
@@ -639,13 +677,13 @@ def run_trainer(username: str):
         # ----- Carte visuelle -----
         card_html = (
             "<div style='background:#F9FAFB;border-radius:20px;"
-            "padding:24px 32px;margin:8px 0 16px 0;border:1px solid #E5E7EB;'>"
+            "padding:24px 32px;margin:8px 0 12px 0;border:1px solid #E5E7EB;'>"
             "<div style='display:flex;justify-content:space-between;"
             "align-items:center;flex-wrap:wrap;row-gap:4px;font-size:12px;"
             "color:#6B7280;'>"
             "<div>"
             f"Format : <b>{table_type_s}</b><br/>"
-            f"Scénario : <code>{scenario_s}</code>"
+            f"Scénario brut : <code>{scenario_s}</code>"
             "</div>"
             "<div style='text-align:right;'>"
             f"Spot : <span style='font-family:monospace;'>{spot_key_s}</span>"
@@ -670,11 +708,23 @@ def run_trainer(username: str):
         )
         st.markdown(card_html, unsafe_allow_html=True)
 
+        # ----- Phrase de scénario bien visible -----
+        scenario_sentence = scenario_to_sentence(table_type_s, position_s, scenario_s)
+        st.markdown(
+            f"<div style='font-size:16px;font-weight:500;margin:4px 0 16px 0;'>"
+            f"{scenario_sentence}"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
         # ----- Choix d'action -----
         st.markdown("#### 🤔 Que fais-tu dans ce spot ?")
 
         actions_row1 = ["fold", "open", "call"]
         actions_row2 = ["threebet", "open_shove", "threebet_shove"]
+
+        def button_label(act: str) -> str:
+            return f"{ACTION_EMOJI.get(act, '')} {ACTION_LABELS[act]}"
 
         def on_answer(action_key: str):
             current_spot = st.session_state.current_spot
@@ -722,13 +772,13 @@ def run_trainer(username: str):
         c1, c2, c3 = st.columns(3)
         for col, act in zip((c1, c2, c3), actions_row1):
             with col:
-                if st.button(ACTION_LABELS[act], key=f"btn_{act}"):
+                if st.button(button_label(act), key=f"btn_{act}"):
                     on_answer(act)
 
         c4, c5, c6 = st.columns(3)
         for col, act in zip((c4, c5, c6), actions_row2):
             with col:
-                if st.button(ACTION_LABELS[act], key=f"btn_{act}"):
+                if st.button(button_label(act), key=f"btn_{act}"):
                     on_answer(act)
 
         fb = st.session_state.last_feedback
