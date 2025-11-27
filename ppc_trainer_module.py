@@ -1,4 +1,4 @@
-# ppc_trainer_module.py (ou trainer_module.py)
+# trainer_module.py
 
 import os
 import sys
@@ -386,6 +386,43 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) 
 
 
 # =========================================================
+#  Affichage "gros" de la main
+# =========================================================
+
+def render_hand_big_html(hand: str) -> str:
+    """
+    Retourne un bloc HTML qui affiche la main en gros, avec des symboles de couleur.
+    On ne cherche pas la vraie couleur des cartes, juste un rendu lisible :
+    - première carte noire (♠)
+    - deuxième carte rouge (♥)
+    - si main suited, on force les deux en noir pour rappeler le suited
+    """
+    hand = hand.upper()
+    r1 = hand[0]
+    r2 = hand[1]
+    suffix = hand[2] if len(hand) == 3 else ""
+
+    # Par défaut : première carte noire, deuxième rouge
+    suit1 = "♠"
+    suit2 = "♥"
+    color1 = "#111827"  # noir
+    color2 = "#DC2626"  # rouge
+
+    # Si suited, on met les deux en noir
+    if suffix == "S":
+        suit2 = "♠"
+        color2 = "#111827"
+
+    return f"""
+    <div style="font-size:40px;font-weight:600;letter-spacing:1px;">
+      <span style="color:{color1};">{r1}{suit1}</span>
+      &nbsp;
+      <span style="color:{color2};">{r2}{suit2}</span>
+    </div>
+    """
+
+
+# =========================================================
 #  Logique principale : tirer une nouvelle main
 # =========================================================
 
@@ -508,65 +545,15 @@ def evaluate_answer(hero_action: str, hero_hand: str, actions_for_spot: dict) ->
     return hero_hand_u in allowed_hands
 
 
-
-def render_hand_big_html(hand: str) -> str:
-    """
-    Retourne un bloc HTML qui affiche la main en gros, avec des symboles de couleur.
-    On ne cherche pas la "vraie" couleur des cartes, juste un rendu lisible :
-    - première carte noire (♠)
-    - deuxième carte rouge (♥)
-    - si main suited, on force les deux en noir pour rappeler le suited
-    """
-    hand = hand.upper()
-    r1 = hand[0]
-    r2 = hand[1]
-    suffix = hand[2] if len(hand) == 3 else ""
-
-    # Par défaut : première carte noire, deuxième rouge
-    suit1 = "♠"
-    suit2 = "♥"
-    color1 = "#111827"  # noir
-    color2 = "#DC2626"  # rouge
-
-    # Si suited, on met les deux en noir pour faire "paquet"
-    if suffix == "S":
-        suit2 = "♠"
-        color2 = "#111827"
-
-    return f"""
-    <div style="font-size:40px;font-weight:600;letter-spacing:1px;">
-      <span style="color:{color1};">{r1}{suit1}</span>
-      &nbsp;
-      <span style="color:{color2};">{r2}{suit2}</span>
-    </div>
-    """
-
 # =========================================================
-#  Fonction principale appelée par PPC-APP.py
+#  Fonction principale appelée par l'app globale
 # =========================================================
 
 def run_trainer(username: str):
     """
     Interface d'entraînement.
-    À appeler depuis PPC-APP.py : run_trainer(username)
+    À appeler depuis l'app globale : run_trainer(username)
     """
-
-    # ----------- Bandeau debug très visible -----------
-    st.markdown(
-        """
-        <div style="
-            padding: 0.4rem 0.8rem;
-            border-radius: 0.5rem;
-            background: #DBEAFE;
-            color: #1D4ED8;
-            font-size: 12px;
-            margin-bottom: 0.5rem;
-        ">
-          <b>Trainer V4</b> – module <code>ppc_trainer_module.py</code> chargé.
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
     # ----------- Initialisation état session -----------
     if "trainer_user" not in st.session_state:
@@ -590,30 +577,25 @@ def run_trainer(username: str):
     default_ranges = load_ranges_file(default_ranges_path())
     user_ranges = load_ranges_file(user_ranges_path(username))
 
-    # Mini info debug
-    st.caption(
-        f"Ranges défaut : {len(default_ranges.get('spots', {}))} spots | "
-        f"Ranges perso : {len(user_ranges.get('spots', {}))} spots"
-    )
-
     st.markdown(f"*Trainer – profil **{username}***")
     st.markdown("### 🧠 Poker Trainer – Ranges & Leitner")
 
-    # =====================================================
-    #  PARAMÈTRES D'ENTRAÎNEMENT (BLOC EN HAUT, PLEINE LARGEUR)
-    # =====================================================
-    st.markdown("#### ⚙️ Paramètres d'entraînement")
+    # ----------- Layout global -----------
+    col_left, col_right = st.columns([1, 2])
 
-    # Ligne 1 : Mode + Format
-    col_p1, col_p2 = st.columns([1, 1])
-    with col_p1:
+    # ----------- Colonne de gauche : configuration -----------
+    with col_left:
+        st.subheader("⚙️ Paramètres d'entraînement")
+
+        # 1) Mode d'entraînement
         mode = st.radio(
             "Mode d'entraînement",
             ["Entraînement libre", "Avec ranges de correction"],
             index=1,
             key="trainer_mode",
         )
-    with col_p2:
+
+        # 2) Format de table
         table_type = st.radio(
             "Format de table",
             ["6-max", "8-max"],
@@ -622,21 +604,19 @@ def run_trainer(username: str):
             key="trainer_table_type",
         )
 
-    # Ligne 2 : Position + Stack
-    if table_type == "6-max":
-        positions_list = POSITIONS_6MAX
-    else:
-        positions_list = POSITIONS_8MAX
+        if table_type == "6-max":
+            positions_list = POSITIONS_6MAX
+        else:
+            positions_list = POSITIONS_8MAX
 
-    col_p3, col_p4 = st.columns([1, 1])
-    with col_p3:
+        # 3) Position & stack (avec option Aléatoire)
         pos_choice = st.selectbox(
             "Position (ou Aléatoire)",
             ["Aléatoire"] + positions_list,
             index=0,
             key="trainer_pos_choice",
         )
-    with col_p4:
+
         stack_choice_label = st.selectbox(
             "Stack (BB) (ou Aléatoire)",
             ["Aléatoire"] + [str(s) for s in STACKS],
@@ -644,16 +624,29 @@ def run_trainer(username: str):
             key="trainer_stack_choice",
         )
 
-    # Ligne 3 : Source ranges (uniquement utile en mode correction)
-    col_p5, col_p6 = st.columns([1, 1])
-    with col_p5:
+        # 4) Source des ranges (utile seulement si mode correction)
         ranges_source = st.radio(
             "Source des ranges (mode correction)",
             ["Ranges par défaut", "Ranges personnelles"],
             index=0,
             key="trainer_ranges_source",
         )
-    with col_p6:
+
+        if mode == "Avec ranges de correction":
+            if ranges_source == "Ranges personnelles":
+                if not user_ranges.get("spots"):
+                    st.warning(
+                        "Aucune range personnelle trouvée. "
+                        "Les ranges par défaut seront utilisées si disponibles."
+                    )
+            else:
+                if not default_ranges.get("spots"):
+                    st.error(
+                        "Aucune range par défaut trouvée. "
+                        "Le mode 'Avec ranges de correction' ne pourra pas fonctionner."
+                    )
+
+        st.markdown("---")
         stats = st.session_state.trainer_stats
         total_s = stats["total"]["success"]
         total_f = stats["total"]["fail"]
@@ -666,28 +659,7 @@ def run_trainer(username: str):
             f"- Précision : **{acc:.1f}%**"
         )
 
-    if mode == "Avec ranges de correction":
-        if ranges_source == "Ranges personnelles":
-            if not user_ranges.get("spots"):
-                st.warning(
-                    "Aucune range personnelle trouvée. "
-                    "Les ranges par défaut seront utilisées si disponibles."
-                )
-        else:
-            if not default_ranges.get("spots"):
-                st.error(
-                    "Aucune range par défaut trouvée. "
-                    "Le mode 'Avec ranges de correction' ne pourra pas fonctionner."
-                )
-
-    st.markdown("---")
-
-    # =====================================================
-    #  PARTIE SPOT + ACTIONS
-    # =====================================================
-    col_left, col_right = st.columns([1, 2])
-
-    # Colonne droite = Spot + actions
+    # ----------- Colonne de droite : Spot + actions -----------
     with col_right:
         st.subheader("🎯 Spot actuel")
 
@@ -710,6 +682,7 @@ def run_trainer(username: str):
             else:
                 st.session_state.current_spot = new_spot
                 st.session_state.last_feedback = None
+
         spot = st.session_state.current_spot
 
         if not spot:
@@ -783,7 +756,6 @@ def run_trainer(username: str):
 
         st.markdown("#### 🤔 Que fais-tu dans ce spot ?")
 
-
         actions_row1 = ["fold", "open", "call"]
         actions_row2 = ["threebet", "open_shove", "threebet_shove"]
 
@@ -796,10 +768,10 @@ def run_trainer(username: str):
 
             correct = evaluate_answer(action_key, hero_hand, actions_for_spot)
 
-            stats_loc = st.session_state.trainer_stats
+            stats = st.session_state.trainer_stats
             if mode == "Avec ranges de correction" and current_spot["spot_key"]:
-                update_stats(stats_loc, current_spot["spot_key"], success=correct)
-                save_trainer_stats(username, stats_loc)
+                update_stats(stats, current_spot["spot_key"], success=correct)
+                save_trainer_stats(username, stats)
 
             if mode == "Entraînement libre":
                 st.session_state.last_feedback = {
@@ -851,12 +823,3 @@ def run_trainer(username: str):
                     hero_hand=spot["hand"],
                 )
                 st.markdown(html_table, unsafe_allow_html=True)
-
-    # Colonne gauche vide pour l’instant (pour équilibre visuel)
-    with col_left:
-        st.markdown(
-            "<div style='font-size:12px;color:#6B7280;'>"
-            "Tu peux ajuster les paramètres d'entraînement en haut de la page."
-            "</div>",
-            unsafe_allow_html=True,
-        )
