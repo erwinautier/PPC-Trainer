@@ -1,4 +1,4 @@
-# trainer_module.py
+# ppc_trainer_module.py (ou trainer_module.py)
 
 import os
 import sys
@@ -509,15 +509,32 @@ def evaluate_answer(hero_action: str, hero_hand: str, actions_for_spot: dict) ->
 
 
 # =========================================================
-#  Fonction principale appelée par app.py
+#  Fonction principale appelée par PPC-APP.py
 # =========================================================
 
 def run_trainer(username: str):
     """
     Interface d'entraînement.
-    À appeler depuis app.py : run_trainer(username)
+    À appeler depuis PPC-APP.py : run_trainer(username)
     """
-    st.info("Trainer v2 – debug : module trainer_module.py chargé ✅")
+
+    # ----------- Bandeau debug très visible -----------
+    st.markdown(
+        """
+        <div style="
+            padding: 0.4rem 0.8rem;
+            border-radius: 0.5rem;
+            background: #DBEAFE;
+            color: #1D4ED8;
+            font-size: 12px;
+            margin-bottom: 0.5rem;
+        ">
+          <b>Trainer V4</b> – module <code>ppc_trainer_module.py</code> chargé.
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
     # ----------- Initialisation état session -----------
     if "trainer_user" not in st.session_state:
         st.session_state.trainer_user = username
@@ -549,22 +566,21 @@ def run_trainer(username: str):
     st.markdown(f"*Trainer – profil **{username}***")
     st.markdown("### 🧠 Poker Trainer – Ranges & Leitner")
 
-    # ----------- Layout global -----------
-    col_left, col_right = st.columns([1, 2])
+    # =====================================================
+    #  PARAMÈTRES D'ENTRAÎNEMENT (BLOC EN HAUT, PLEINE LARGEUR)
+    # =====================================================
+    st.markdown("#### ⚙️ Paramètres d'entraînement")
 
-    # ----------- Colonne de gauche : configuration -----------
-    with col_left:
-        st.subheader("⚙️ Paramètres")
-
-        # 1) Mode d'entraînement
+    # Ligne 1 : Mode + Format
+    col_p1, col_p2 = st.columns([1, 1])
+    with col_p1:
         mode = st.radio(
             "Mode d'entraînement",
             ["Entraînement libre", "Avec ranges de correction"],
             index=1,
             key="trainer_mode",
         )
-
-        # 2) Format de table
+    with col_p2:
         table_type = st.radio(
             "Format de table",
             ["6-max", "8-max"],
@@ -573,19 +589,21 @@ def run_trainer(username: str):
             key="trainer_table_type",
         )
 
-        if table_type == "6-max":
-            positions_list = POSITIONS_6MAX
-        else:
-            positions_list = POSITIONS_8MAX
+    # Ligne 2 : Position + Stack
+    if table_type == "6-max":
+        positions_list = POSITIONS_6MAX
+    else:
+        positions_list = POSITIONS_8MAX
 
-        # 3) Position & stack (avec option Aléatoire)
+    col_p3, col_p4 = st.columns([1, 1])
+    with col_p3:
         pos_choice = st.selectbox(
             "Position (ou Aléatoire)",
             ["Aléatoire"] + positions_list,
             index=0,
             key="trainer_pos_choice",
         )
-
+    with col_p4:
         stack_choice_label = st.selectbox(
             "Stack (BB) (ou Aléatoire)",
             ["Aléatoire"] + [str(s) for s in STACKS],
@@ -593,29 +611,16 @@ def run_trainer(username: str):
             key="trainer_stack_choice",
         )
 
-        # 4) Source des ranges (utile seulement si mode correction)
+    # Ligne 3 : Source ranges (uniquement utile en mode correction)
+    col_p5, col_p6 = st.columns([1, 1])
+    with col_p5:
         ranges_source = st.radio(
             "Source des ranges (mode correction)",
             ["Ranges par défaut", "Ranges personnelles"],
             index=0,
             key="trainer_ranges_source",
         )
-
-        if mode == "Avec ranges de correction":
-            if ranges_source == "Ranges personnelles":
-                if not user_ranges.get("spots"):
-                    st.warning(
-                        "Aucune range personnelle trouvée. "
-                        "Les ranges par défaut seront utilisées si disponibles."
-                    )
-            else:
-                if not default_ranges.get("spots"):
-                    st.error(
-                        "Aucune range par défaut trouvée. "
-                        "Le mode 'Avec ranges de correction' ne pourra pas fonctionner."
-                    )
-
-        st.markdown("---")
+    with col_p6:
         stats = st.session_state.trainer_stats
         total_s = stats["total"]["success"]
         total_f = stats["total"]["fail"]
@@ -628,7 +633,28 @@ def run_trainer(username: str):
             f"- Précision : **{acc:.1f}%**"
         )
 
-    # ----------- Colonne de droite : Spot + actions -----------
+    if mode == "Avec ranges de correction":
+        if ranges_source == "Ranges personnelles":
+            if not user_ranges.get("spots"):
+                st.warning(
+                    "Aucune range personnelle trouvée. "
+                    "Les ranges par défaut seront utilisées si disponibles."
+                )
+        else:
+            if not default_ranges.get("spots"):
+                st.error(
+                    "Aucune range par défaut trouvée. "
+                    "Le mode 'Avec ranges de correction' ne pourra pas fonctionner."
+                )
+
+    st.markdown("---")
+
+    # =====================================================
+    #  PARTIE SPOT + ACTIONS
+    # =====================================================
+    col_left, col_right = st.columns([1, 2])
+
+    # Colonne droite = Spot + actions
     with col_right:
         st.subheader("🎯 Spot actuel")
 
@@ -687,10 +713,10 @@ def run_trainer(username: str):
 
             correct = evaluate_answer(action_key, hero_hand, actions_for_spot)
 
-            stats = st.session_state.trainer_stats
+            stats_loc = st.session_state.trainer_stats
             if mode == "Avec ranges de correction" and current_spot["spot_key"]:
-                update_stats(stats, current_spot["spot_key"], success=correct)
-                save_trainer_stats(username, stats)
+                update_stats(stats_loc, current_spot["spot_key"], success=correct)
+                save_trainer_stats(username, stats_loc)
 
             if mode == "Entraînement libre":
                 st.session_state.last_feedback = {
@@ -742,3 +768,12 @@ def run_trainer(username: str):
                     hero_hand=spot["hand"],
                 )
                 st.markdown(html_table, unsafe_allow_html=True)
+
+    # Colonne gauche vide pour l’instant (pour équilibre visuel)
+    with col_left:
+        st.markdown(
+            "<div style='font-size:12px;color:#6B7280;'>"
+            "Tu peux ajuster les paramètres d'entraînement en haut de la page."
+            "</div>",
+            unsafe_allow_html=True,
+        )
