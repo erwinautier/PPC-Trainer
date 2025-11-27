@@ -76,7 +76,7 @@ except ImportError:
     run_trainer = None
 
 try:
-    from range_editor_module import run_range_editor
+    from range_editor_moduleV2 import run_range_editor
 except ImportError:
     run_range_editor = None
 
