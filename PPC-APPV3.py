@@ -6,12 +6,10 @@ import hashlib
 import secrets   # ⬅⬅⬅ AJOUTER ÇA
 
 import streamlit as st
-from supabase import create_client, Client
+from supabase-py import create_client, Client
 
 
-import streamlit as st
 
-from supabase import create_client, Client
 
 @st.cache_resource
 def get_supabase() -> Client:
