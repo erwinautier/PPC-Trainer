@@ -38,44 +38,72 @@ def base_dir():
     return os.path.dirname(os.path.abspath(__file__))
 
 
-USERS_FILE = os.path.join(base_dir(), "users.json")
+# Ancien code 
+#USERS_FILE = os.path.join(base_dir(), "users.json")
 
-
-def load_users():
-    if os.path.exists(USERS_FILE):
-        try:
-            return json.load(open(USERS_FILE, "r", encoding="utf-8"))
-        except Exception:
-            return {}
-    return {}
-
-
-def save_users(users):
-    json.dump(users, open(USERS_FILE, "w", encoding="utf-8"), indent=2)
-
+#---------------------------------------------------------------------------------
+#def load_users():
+#    if os.path.exists(USERS_FILE):
+#        try:
+#            return json.load(open(USERS_FILE, "r", encoding="utf-8"))
+#        except Exception:
+#           return {}
+#    return {}
+#
+#
+#def save_users(users):
+#    json.dump(users, open(USERS_FILE, "w", encoding="utf-8"), indent=2)
+#----------------------------------------------------------------------------------
 
 def hash_pw(pwd, salt):
     return hashlib.sha256((salt + pwd).encode()).hexdigest()
 
 
 def create_user(username, pwd):
-    users = load_users()
+    """
+    Crée un utilisateur dans la table app_users de Supabase.
+    Retourne True si OK, False si déjà existant ou problème.
+    """
     username = username.strip()
-    if not username or username in users:
+    if not username:
         return False
-    salt = os.urandom(16).hex()
-    users[username] = {"salt": salt, "hash": hash_pw(pwd, salt)}
-    save_users(users)
+
+    # Vérifier si déjà existant
+    existing = supabase.table("app_users").select("username")\
+        .eq("username", username).execute()
+    if existing.data:
+        return False
+
+    # Créer user
+    salt = secrets.token_hex(16)
+    password_hash = hash_pw(pwd, salt)
+    supabase.table("app_users").insert({
+        "username": username,
+        "salt": salt,
+        "password_hash": password_hash,
+    }).execute()
     return True
 
 
+
 def check_login(username, pwd):
-    users = load_users()
+    """
+    Vérifie login / mot de passe en lisant dans app_users (Supabase).
+    """
     username = username.strip()
-    info = users.get(username)
-    if not info:
+    if not username:
         return False
-    return info["hash"] == hash_pw(pwd, info["salt"])
+
+    resp = supabase.table("app_users").select("*")\
+        .eq("username", username).limit(1).execute()
+    rows = resp.data
+    if not rows:
+        return False
+
+    row = rows[0]
+    salt = row["salt"]
+    expected_hash = row["password_hash"]
+    return expected_hash == hash_pw(pwd, salt)
 
 
 # =========================================================
