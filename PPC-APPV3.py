@@ -6,7 +6,7 @@ import hashlib
 import secrets   # ⬅⬅⬅ AJOUTER ÇA
 
 import streamlit as st
-from supabase-py import create_client, Client
+from supabase import create_client, Client
 
 
 
