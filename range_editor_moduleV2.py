@@ -12,12 +12,24 @@ from supabase import create_client, Client
 # Connexion Supabase
 # -----------------------------
 @st.cache_resource
-def get_supabase() -> Client:
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["anon_key"]
-    return create_client(url, key)
+def get_supabase() -> Client | None:
+    """Client Supabase partagé pour l'éditeur de ranges.
+    Retourne None si la configuration est absente ou invalide.
+    """
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        st.sidebar.error(
+            "⚠️ SUPABASE_URL ou SUPABASE_ANON_KEY manquent dans st.secrets.\n"
+            "Les ranges seront seulement chargées/enregistrées via fichiers .json."
+        )
+        return None
 
-supabase = get_supabase()
+    try:
+        client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        st.sidebar.caption("[DEBUG] Client Supabase (ranges) initialisé.")
+        return client
+    except Exception as e:
+        st.sidebar.error(f"⚠️ Erreur d'initialisation Supabase (ranges) : {e}")
+        return None
 
 # -----------------------------
 # Constantes poker
