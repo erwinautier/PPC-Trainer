@@ -13,8 +13,8 @@ from supabase import create_client, Client
 
 @st.cache_resource
 def get_supabase() -> Client:
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["anon_key"]
+    url = st.secrets.get("SUPABASE_URL")
+    key = st.secrets.get("SUPABASE_ANON_KEY")
     return create_client(url, key)
 
 supabase = get_supabase()
