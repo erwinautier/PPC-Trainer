@@ -271,6 +271,18 @@ def run_range_editor(username: str):
 - Tu peux créer **une liste de ranges** (spots) : un spot = Format + Position + Stack + Scénario.
 """
     )
+        # ----- Bouton de debug Supabase -----
+    with st.expander("🔍 Debug Supabase (user_ranges)", expanded=False):
+        if st.button("Afficher les ranges brutes depuis Supabase"):
+            try:
+                resp = supabase.table("user_ranges")\
+                    .select("*")\
+                    .eq("username", username)\
+                    .execute()
+                st.write("Résultat user_ranges pour", username, ":", resp.data)
+            except Exception as e:
+                st.error(f"Erreur lecture user_ranges : {repr(e)}")
+
 
     # -----------------------------------------------------
     # État en session
