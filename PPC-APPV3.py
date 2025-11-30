@@ -8,16 +8,33 @@ import secrets   # ⬅⬅⬅ AJOUTER ÇA
 import streamlit as st
 from supabase import create_client, Client
 
-
-
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
+SUPABASE_ANON_KEY = st.secrets.get("SUPABASE_ANON_KEY", "")
 
 @st.cache_resource
-def get_supabase() -> Client:
-    url = st.secrets.get("SUPABASE_URL")
-    key = st.secrets.get("SUPABASE_ANON_KEY")
-    return create_client(url, key)
+def get_supabase() -> Client | None:
+    """
+    Client Supabase partagé. Retourne None si la config est absente
+    ou si l'initialisation échoue.
+    """
+    url = SUPABASE_URL
+    key = SUPABASE_ANON_KEY
 
-supabase = get_supabase()
+    if not url or not key:
+        # On nève PAS d'exception, on affiche juste un message.
+        st.sidebar.error(
+            "⚠️ SUPABASE_URL ou SUPABASE_ANON_KEY manquent dans st.secrets. "
+            "Les données seront seulement stockées en local."
+        )
+        return None
+
+    try:
+        client = create_client(url, key)
+        st.sidebar.caption("[DEBUG] Client Supabase global initialisé.")
+        return client
+    except Exception as e:
+        st.sidebar.error(f"⚠️ Erreur d'initialisation Supabase (global) : {e}")
+        return None
 
 
 # =========================================================
