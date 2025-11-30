@@ -14,6 +14,7 @@ from supabase import create_client, Client
 SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
 SUPABASE_ANON_KEY = st.secrets.get("SUPABASE_ANON_KEY", "")
 
+
 @st.cache_resource
 def get_supabase() -> Client | None:
     if not SUPABASE_URL or not SUPABASE_ANON_KEY:
@@ -29,6 +30,8 @@ def get_supabase() -> Client | None:
     except Exception as e:
         st.sidebar.error(f"Erreur init Supabase (ranges) : {e}")
         return None
+
+
 # -----------------------------
 # Constantes poker
 # -----------------------------
@@ -127,7 +130,10 @@ ALL_HANDS = all_hands_set()
 def spots_from_exported_data(data: dict) -> dict:
     """
     Convertit un JSON de ranges exporté en structure interne :
-    spot_key -> { table_type, position, stack, scenario, hand_actions:{hand:set(actions)} }
+    spot_key -> {
+        table_type, position, stack, scenario,
+        hand_actions:{hand:set(actions)}
+    }
 
     On accepte deux formats :
     1) {"version":2, "spots":{...}}
@@ -221,7 +227,7 @@ def save_user_ranges_to_supabase(username: str, export_data: dict):
         return
 
     try:
-        resp = (
+        _ = (
             client.table("user_ranges")
             .upsert(
                 {
@@ -234,7 +240,6 @@ def save_user_ranges_to_supabase(username: str, export_data: dict):
         st.sidebar.success("Ranges enregistrées dans Supabase ✅")
     except Exception as e:
         st.sidebar.error(f"Erreur Supabase user_ranges : {repr(e)}")
-
 
 
 # -----------------------------
@@ -285,12 +290,12 @@ def update_hand_action(spot_key: str, hand_code: str):
 
 
 # =========================================================
-#  FONCTION PRINCIPALE APPELÉE PAR PPC-APP.py
+#  FONCTION PRINCIPALE APPELÉE PAR L'APP GLOBALE
 # =========================================================
 def run_range_editor(username: str):
     """
     Module d'édition de ranges.
-    À appeler depuis PPC-APP.py avec : run_range_editor(username)
+    À appeler depuis l'app principale avec : run_range_editor(username)
     """
 
     # -----------------------------------------------------
@@ -308,18 +313,24 @@ def run_range_editor(username: str):
 - Tu peux créer **une liste de ranges** (spots) : un spot = Format + Position + Stack + Scénario.
 """
     )
-        # ----- Bouton de debug Supabase -----
+
+    # ----- Bouton de debug Supabase -----
     with st.expander("🔍 Debug Supabase (user_ranges)", expanded=False):
         if st.button("Afficher les ranges brutes depuis Supabase"):
-            try:
-                resp = supabase.table("user_ranges")\
-                    .select("*")\
-                    .eq("username", username)\
-                    .execute()
-                st.write("Résultat user_ranges pour", username, ":", resp.data)
-            except Exception as e:
-                st.error(f"Erreur lecture user_ranges : {repr(e)}")
-
+            client = get_supabase()
+            if client is None:
+                st.info("Supabase non configuré ou indisponible.")
+            else:
+                try:
+                    resp = (
+                        client.table("user_ranges")
+                        .select("*")
+                        .eq("username", username)
+                        .execute()
+                    )
+                    st.write("Résultat user_ranges pour", username, ":", resp.data)
+                except Exception as e:
+                    st.error(f"Erreur lecture user_ranges : {repr(e)}")
 
     # -----------------------------------------------------
     # État en session
@@ -419,6 +430,7 @@ def run_range_editor(username: str):
     with col_sel2:
         stack = st.selectbox("Stack (BB)", STACKS, index=0)
 
+    # Scénarios possibles : open + vs_open des positions précédentes
     pos_index = positions_list.index(position)
     previous_positions = positions_list[:pos_index]
     available_scenarios = ["open"] + [f"vs_open_{p}" for p in previous_positions]
@@ -554,6 +566,7 @@ def run_range_editor(username: str):
                 args=(spot_key, hand_code),
             )
 
+    # Mise à jour du spot courant dans la session
     current_spot["hand_actions"] = st.session_state.spots.get(spot_key, current_spot)[
         "hand_actions"
     ]
@@ -563,7 +576,9 @@ def run_range_editor(username: str):
     current_spot["scenario"] = scenario
     st.session_state.spots[spot_key] = current_spot
 
-    # À chaque rendu, on fabrique l'export global + bouton de téléchargement
+    # -----------------------------------------------------
+    # Export global + bouton de téléchargement
+    # -----------------------------------------------------
     export_spots = prepare_export_spots(st.session_state.spots)
     export_data = {"version": 2, "spots": export_spots}
     export_json = json.dumps(export_data, indent=2)
