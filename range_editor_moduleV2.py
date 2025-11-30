@@ -16,23 +16,18 @@ SUPABASE_ANON_KEY = st.secrets.get("SUPABASE_ANON_KEY", "")
 
 @st.cache_resource
 def get_supabase() -> Client | None:
-    """Client Supabase partagé pour l'éditeur de ranges."""
-    url = (SUPABASE_URL or "").strip()
-    key = (SUPABASE_ANON_KEY or "").strip()
-
-    if not url or not key:
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
         st.sidebar.warning(
-            "⚠️ Supabase non configuré pour l'éditeur de ranges. "
-            "Les ranges ne seront pas synchronisées en ligne."
+            "⚠️ Supabase non configuré pour les ranges. "
+            "Les modifications ne seront stockées qu'en local."
         )
         return None
-
     try:
-        client = create_client(url, key)
-        st.sidebar.caption("[DEBUG] Client Supabase (ranges) initialisé ✅")
+        client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        st.sidebar.caption("[DEBUG] Client Supabase (ranges) initialisé.")
         return client
     except Exception as e:
-        st.sidebar.error(f"⚠️ Erreur d'initialisation Supabase (ranges) : {e}")
+        st.sidebar.error(f"Erreur init Supabase (ranges) : {e}")
         return None
 # -----------------------------
 # Constantes poker
@@ -185,37 +180,43 @@ def load_user_ranges_from_supabase(username: str) -> dict:
     """
     client = get_supabase()
     if client is None:
-        # Pas de Supabase → on considère simplement qu'il n'y a rien en ligne
         return {}
 
     try:
         resp = (
             client.table("user_ranges")
-            .select("data")
+            .select("ranges_json")
             .eq("username", username)
             .limit(1)
             .execute()
         )
-        rows = resp.data
+        rows = resp.data or []
         if not rows:
             return {}
-        data = rows[0].get("data") or {}
-        return data
+
+        data = rows[0].get("ranges_json") or {}
+        # On s'assure d'un format {version, spots}
+        if "spots" in data and isinstance(data["spots"], dict):
+            return data
+        if isinstance(data, dict) and any(
+            isinstance(v, dict) and "position" in v for v in data.values()
+        ):
+            return {"version": 2, "spots": data}
+        return {}
     except Exception as e:
-        st.warning(f"Impossible de lire les ranges Supabase : {e}")
+        st.sidebar.warning(f"Impossible de lire les ranges Supabase : {e}")
         return {}
 
 
 def save_user_ranges_to_supabase(username: str, export_data: dict):
     """
     Sauvegarde (upsert) les ranges de l'utilisateur dans user_ranges.
-    Affiche clairement le succès ou l'erreur.
+    export_data doit être un dict {version, spots}.
     """
     client = get_supabase()
     if client is None:
         st.sidebar.warning(
-            "[DEBUG] Supabase non disponible pour les ranges – "
-            "les modifications ne sont enregistrées que dans le fichier téléchargé."
+            "[DEBUG] Supabase indisponible – ranges seulement dans le fichier téléchargé."
         )
         return
 
@@ -225,7 +226,7 @@ def save_user_ranges_to_supabase(username: str, export_data: dict):
             .upsert(
                 {
                     "username": username,
-                    "data": export_data,
+                    "ranges_json": export_data,
                 }
             )
             .execute()
