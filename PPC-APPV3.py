@@ -80,51 +80,84 @@ def hash_pw(pwd, salt):
     return hashlib.sha256((salt + pwd).encode()).hexdigest()
 
 
-def create_user(username, pwd):
+def create_user(username: str, pwd: str) -> bool:
     """
-    Crée un utilisateur dans la table app_users de Supabase.
-    Retourne True si OK, False si déjà existant ou problème.
-    """
-    username = username.strip()
-    if not username:
-        return False
-
-    # Vérifier si déjà existant
-    existing = supabase.table("app_users").select("username")\
-        .eq("username", username).execute()
-    if existing.data:
-        return False
-
-    # Créer user
-    salt = secrets.token_hex(16)
-    password_hash = hash_pw(pwd, salt)
-    supabase.table("app_users").insert({
-        "username": username,
-        "salt": salt,
-        "password_hash": password_hash,
-    }).execute()
-    return True
-
-
-
-def check_login(username, pwd):
-    """
-    Vérifie login / mot de passe en lisant dans app_users (Supabase).
+    Crée un utilisateur dans la table app_users (Supabase).
+    Retourne True si tout va bien, False sinon.
     """
     username = username.strip()
-    if not username:
+    if not username or not pwd:
         return False
 
-    resp = supabase.table("app_users").select("*")\
-        .eq("username", username).limit(1).execute()
-    rows = resp.data
-    if not rows:
+    client = get_supabase()
+    if client is None:
+        st.sidebar.error("Supabase indisponible : impossible de créer le profil en ligne.")
         return False
 
-    row = rows[0]
-    salt = row["salt"]
-    expected_hash = row["password_hash"]
-    return expected_hash == hash_pw(pwd, salt)
+    # même logique de hash que tu avais avant
+    import os, hashlib
+    salt = os.urandom(16).hex()
+    password_hash = hashlib.sha256((salt + pwd).encode()).hexdigest()
+
+    try:
+        resp = (
+            client.table("app_users")
+            .insert(
+                {
+                    "username": username,
+                    "salt": salt,
+                    "password_hash": password_hash,
+                }
+            )
+            .execute()
+        )
+        # Si ça ne plante pas, on considère que c'est OK
+        return True
+    except Exception as e:
+        st.sidebar.error(f"[Supabase app_users] Erreur lors de la création du profil : {e}")
+        return False
+
+
+
+def check_login(username: str, pwd: str) -> bool:
+    """
+    Vérifie les identifiants en interrogeant la table app_users.
+    Retourne True si (username, pwd) sont corrects.
+    """
+    username = username.strip()
+    if not username or not pwd:
+        return False
+
+    client = get_supabase()
+    if client is None:
+        st.sidebar.error("Supabase indisponible : impossible de vérifier le login.")
+        return False
+
+    import hashlib
+
+    try:
+        resp = (
+            client.table("app_users")
+            .select("salt, password_hash")
+            .eq("username", username)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            return False
+
+        row = rows[0]
+        salt = row["salt"]
+        expected_hash = row["password_hash"]
+
+        given_hash = hashlib.sha256((salt + pwd).encode()).hexdigest()
+        return given_hash == expected_hash
+
+    except Exception as e:
+        st.sidebar.error(f"[Supabase app_users] Erreur lors de la vérification du login : {e}")
+        return False
+
 
 
 # =========================================================
