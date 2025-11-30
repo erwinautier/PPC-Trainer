@@ -11,26 +11,29 @@ from supabase import create_client, Client
 # -----------------------------
 # Connexion Supabase
 # -----------------------------
+SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
+SUPABASE_ANON_KEY = st.secrets.get("SUPABASE_ANON_KEY", "")
+
 @st.cache_resource
 def get_supabase() -> Client | None:
-    """Client Supabase partagé pour l'éditeur de ranges.
-    Retourne None si la configuration est absente ou invalide.
-    """
-    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-        st.sidebar.error(
-            "⚠️ SUPABASE_URL ou SUPABASE_ANON_KEY manquent dans st.secrets.\n"
-            "Les ranges seront seulement chargées/enregistrées via fichiers .json."
+    """Client Supabase partagé pour l'éditeur de ranges."""
+    url = (SUPABASE_URL or "").strip()
+    key = (SUPABASE_ANON_KEY or "").strip()
+
+    if not url or not key:
+        st.sidebar.warning(
+            "⚠️ Supabase non configuré pour l'éditeur de ranges. "
+            "Les ranges ne seront pas synchronisées en ligne."
         )
         return None
 
     try:
-        client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
-        st.sidebar.caption("[DEBUG] Client Supabase (ranges) initialisé.")
+        client = create_client(url, key)
+        st.sidebar.caption("[DEBUG] Client Supabase (ranges) initialisé ✅")
         return client
     except Exception as e:
         st.sidebar.error(f"⚠️ Erreur d'initialisation Supabase (ranges) : {e}")
         return None
-
 # -----------------------------
 # Constantes poker
 # -----------------------------
