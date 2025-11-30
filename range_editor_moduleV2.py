@@ -6,6 +6,18 @@ import json
 from collections import defaultdict
 
 import streamlit as st
+from supabase import create_client, Client
+
+# -----------------------------
+# Connexion Supabase
+# -----------------------------
+@st.cache_resource
+def get_supabase() -> Client:
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["anon_key"]
+    return create_client(url, key)
+
+supabase = get_supabase()
 
 # -----------------------------
 # Constantes poker
@@ -39,26 +51,8 @@ EMPTY_EMOJI = "⬜"
 
 
 # -----------------------------
-# Utilitaires fichier
+# Utilitaires "mains"
 # -----------------------------
-def base_dir():
-    """Dossier racine de l'appli (compatible exécutable)."""
-    if getattr(sys, "frozen", False):
-        return os.path.dirname(sys.executable)
-    return os.path.dirname(os.path.abspath(__file__))
-
-
-def user_ranges_path(username: str) -> str:
-    """Chemin du fichier de ranges perso pour un utilisateur."""
-    safe = "".join(c for c in username if c.isalnum() or c in ("_", "-"))
-    return os.path.join(base_dir(), f"ranges_{safe}.json")
-
-
-def default_ranges_path() -> str:
-    """Chemin éventuel d'un fichier de ranges par défaut global."""
-    return os.path.join(base_dir(), "default_ranges.json")
-
-
 def make_spot_key(table_type: str, position: str, stack: int, scenario: str) -> str:
     """ID de spot incluant le format (6-max/8-max)."""
     return f"{table_type}_{position}_{stack}_{scenario}"
@@ -118,7 +112,7 @@ ALL_HANDS = all_hands_set()
 
 
 # -----------------------------
-# Conversion depuis un JSON exporté
+# Conversion JSON <-> structure interne
 # -----------------------------
 def spots_from_exported_data(data: dict) -> dict:
     """
@@ -129,6 +123,9 @@ def spots_from_exported_data(data: dict) -> dict:
     1) {"version":2, "spots":{...}}
     2) {"spot_key1": {...}, "spot_key2": {...}} (sans clé "spots")
     """
+    if not isinstance(data, dict):
+        return {}
+
     # Cas 1 : format avec clé "spots"
     if "spots" in data and isinstance(data["spots"], dict):
         spots_json = data["spots"]
@@ -164,12 +161,47 @@ def spots_from_exported_data(data: dict) -> dict:
 
 
 # -----------------------------
+# Chargement / sauvegarde Supabase
+# -----------------------------
+def load_user_ranges_from_supabase(username: str) -> dict:
+    """
+    Lit les ranges de l'utilisateur dans la table user_ranges.
+    Retourne un dict {version, spots} ou {}.
+    """
+    try:
+        resp = supabase.table("user_ranges").select("data")\
+            .eq("username", username).limit(1).execute()
+        rows = resp.data
+        if not rows:
+            return {}
+        data = rows[0].get("data") or {}
+        return data
+    except Exception as e:
+        st.warning(f"Impossible de lire les ranges Supabase : {e}")
+        return {}
+
+
+def save_user_ranges_to_supabase(username: str, export_data: dict):
+    """
+    Sauvegarde (upsert) les ranges de l'utilisateur dans user_ranges.
+    """
+    try:
+        supabase.table("user_ranges").upsert({
+            "username": username,
+            "data": export_data,
+        }).execute()
+    except Exception as e:
+        st.warning(f"Impossible d'enregistrer les ranges dans Supabase : {e}")
+
+
+# -----------------------------
 # Callback pour un clic sur une main
 # -----------------------------
 def update_hand_action(spot_key: str, hand_code: str):
     """Callback appelé quand on clique sur un bouton de la grille."""
     spots = st.session_state.spots
 
+    # table_type, position, stack, scenario
     table_type, position, stack_str, scenario = spot_key.split("_", 3)
     stack = int(stack_str)
 
@@ -187,7 +219,6 @@ def update_hand_action(spot_key: str, hand_code: str):
     current_action = st.session_state.current_action
 
     if current_action == "effacer":
-        # enlever toutes les actions pour cette main
         if hand_code in hand_actions:
             del hand_actions[hand_code]
     else:
@@ -206,16 +237,17 @@ def update_hand_action(spot_key: str, hand_code: str):
     spots[spot_key] = spot
     st.session_state.spots = spots
 
-    # Pas de st.rerun ici : le clic sur un bouton déclenche déjà un rerun.
+    # 🔁 On relance pour rafraîchir la grille
+    st.rerun()
 
 
 # =========================================================
-#  FONCTION PRINCIPALE APPELÉE PAR l'appli globale
+#  FONCTION PRINCIPALE APPELÉE PAR PPC-APP.py
 # =========================================================
 def run_range_editor(username: str):
     """
     Module d'édition de ranges.
-    À appeler depuis l'app principale avec : run_range_editor(username)
+    À appeler depuis PPC-APP.py avec : run_range_editor(username)
     """
 
     # -----------------------------------------------------
@@ -243,24 +275,19 @@ def run_range_editor(username: str):
         st.session_state.range_editor_user = username
         st.session_state.spots = {}
 
+    # Chargement initial depuis Supabase (une seule fois si pas de spots)
     if "spots" not in st.session_state:
         st.session_state.spots = {}
-        user_path = user_ranges_path(username)
-        if os.path.exists(user_path):
-            try:
-                with open(user_path, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                new_spots = spots_from_exported_data(data)
-                st.session_state.spots = new_spots
-                if new_spots:
-                    st.info(f"Ranges perso chargées : {len(new_spots)} spots trouvés.")
-                    first_key = sorted(new_spots.keys())[0]
-                    t, p, s_str, scen = first_key.split("_", 3)
-                    st.session_state.table_type = t
-                    st.session_state.scenario = scen
-                    st.session_state.current_spot_key = first_key
-            except Exception as e:
-                st.warning(f"Impossible de charger les ranges perso : {e}")
+        data = load_user_ranges_from_supabase(username)
+        new_spots = spots_from_exported_data(data)
+        st.session_state.spots = new_spots
+        if new_spots:
+            st.info(f"Ranges perso chargées : {len(new_spots)} spots trouvés.")
+            first_key = sorted(new_spots.keys())[0]
+            t, p, s_str, scen = first_key.split("_", 3)
+            st.session_state.table_type = t
+            st.session_state.scenario = scen
+            st.session_state.current_spot_key = first_key
 
     if "current_spot_key" not in st.session_state:
         st.session_state.current_spot_key = None
@@ -270,11 +297,9 @@ def run_range_editor(username: str):
         st.session_state.table_type = "6-max"
     if "scenario" not in st.session_state:
         st.session_state.scenario = "open"
-    if "ranges_uploaded_name" not in st.session_state:
-        st.session_state.ranges_uploaded_name = None
 
     # -----------------------------------------------------
-    # Sidebar : chargement / sauvegarde
+    # Sidebar : import / export
     # -----------------------------------------------------
     st.sidebar.header("Fichiers de ranges")
 
@@ -282,81 +307,38 @@ def run_range_editor(username: str):
         "Charger un fichier de ranges (.json)", type=["json"]
     )
     if uploaded is not None:
-        # On ne traite le fichier que s'il vient de changer
-        if st.session_state.ranges_uploaded_name != uploaded.name:
-            try:
-                data = json.load(uploaded)
-                new_spots = spots_from_exported_data(data)
-                if not new_spots:
-                    st.sidebar.error(
-                        "Fichier lu mais aucun spot reconnu. "
-                        "Vérifie qu'il contient bien un objet 'spots' ou des clés de spots."
-                    )
-                else:
-                    st.session_state.spots = new_spots
-                    first_key = sorted(new_spots.keys())[0]
-                    t, p, s_str, scen = first_key.split("_", 3)
-                    st.session_state.table_type = t
-                    st.session_state.scenario = scen
-                    st.session_state.current_spot_key = first_key
-                    st.session_state.ranges_uploaded_name = uploaded.name
-                    st.sidebar.success(
-                        f"Fichier de ranges chargé avec succès ✅ ({len(new_spots)} spots)"
-                    )
-            except Exception as e:
-                st.sidebar.error(f"Erreur de lecture du fichier : {e}")
+        try:
+            data = json.load(uploaded)
+            new_spots = spots_from_exported_data(data)
+            if not new_spots:
+                st.sidebar.error(
+                    "Fichier lu mais aucun spot reconnu. "
+                    "Vérifie qu'il contient bien un objet 'spots' ou des clés de spots."
+                )
+            else:
+                st.session_state.spots = new_spots
+                first_key = sorted(new_spots.keys())[0]
+                t, p, s_str, scen = first_key.split("_", 3)
+                st.session_state.table_type = t
+                st.session_state.scenario = scen
+                st.session_state.current_spot_key = first_key
+                st.sidebar.success(
+                    f"Fichier de ranges chargé avec succès ✅ ({len(new_spots)} spots)"
+                )
+                # On enregistre aussi dans Supabase
+                export_spots_local = prepare_export_spots(st.session_state.spots)
+                export_data_local = {"version": 2, "spots": export_spots_local}
+                save_user_ranges_to_supabase(username, export_data_local)
+                st.rerun()
+        except Exception as e:
+            st.sidebar.error(f"Erreur de lecture du fichier : {e}")
 
     if st.sidebar.button("🗑️ Effacer toutes les ranges de la session"):
         st.session_state.spots = {}
         st.session_state.current_spot_key = None
         st.sidebar.success("Toutes les ranges ont été effacées (dans la session).")
-
-    # Préparation export JSON (cases vides -> fold)
-    export_spots = {}
-    for key, spot in st.session_state.spots.items():
-        table_type = spot.get("table_type", "6-max")
-        pos = spot["position"]
-        stack = spot["stack"]
-        scen = spot["scenario"]
-        hand_actions = spot.get("hand_actions", {})
-
-        actions_dict = defaultdict(list)
-        for h in ALL_HANDS:
-            acts = hand_actions.get(h, set())
-            if not acts:
-                actions_dict["fold"].append(h)
-            else:
-                for act in acts:
-                    if act in ACTIONS:
-                        actions_dict[act].append(h)
-
-        export_spots[key] = {
-            "table_type": table_type,
-            "position": pos,
-            "stack": stack,
-            "scenario": scen,
-            "actions": {
-                act: sorted(hands) for act, hands in actions_dict.items()
-            },
-        }
-
-    export_data = {"version": 2, "spots": export_spots}
-    export_json = json.dumps(export_data, indent=2)
-
-    # Sauvegarde automatique dans ranges_{username}.json
-    user_path = user_ranges_path(username)
-    try:
-        with open(user_path, "w", encoding="utf-8") as f:
-            f.write(export_json)
-    except Exception as e:
-        st.sidebar.warning(f"Impossible de sauvegarder le fichier utilisateur : {e}")
-
-    st.sidebar.download_button(
-        label="💾 Télécharger le fichier de ranges",
-        data=export_json,
-        file_name="ranges_poker_trainer.json",
-        mime="application/json",
-    )
+        # On efface aussi en base
+        save_user_ranges_to_supabase(username, {"version": 2, "spots": {}})
 
     # -----------------------------------------------------
     # Format de table & sélection du spot
@@ -444,7 +426,11 @@ def run_range_editor(username: str):
     if st.button("💾 Enregistrer cette range (ce spot)"):
         current_spot["hand_actions"] = hand_actions
         st.session_state.spots[spot_key] = current_spot
-        st.success(f"Range enregistrée pour {spot_key}. Tu peux passer à une autre.")
+        st.success(f"Range enregistrée pour {spot_key}.")
+        # Sauvegarde globale de toutes les ranges en base
+        export_spots_local = prepare_export_spots(st.session_state.spots)
+        export_data_local = {"version": 2, "spots": export_spots_local}
+        save_user_ranges_to_supabase(username, export_data_local)
 
     # -----------------------------------------------------
     # Choix de l'action active
@@ -470,6 +456,11 @@ def run_range_editor(username: str):
     if st.button("🧹 Effacer toutes les mains de ce spot"):
         hand_actions.clear()
         st.success("Toutes les mains de ce spot ont été effacées.")
+        current_spot["hand_actions"] = hand_actions
+        st.session_state.spots[spot_key] = current_spot
+        export_spots_local = prepare_export_spots(st.session_state.spots)
+        export_data_local = {"version": 2, "spots": export_spots_local}
+        save_user_ranges_to_supabase(username, export_data_local)
 
     # -----------------------------------------------------
     # Grille 13x13
@@ -516,6 +507,18 @@ def run_range_editor(username: str):
     current_spot["stack"] = stack
     current_spot["scenario"] = scenario
     st.session_state.spots[spot_key] = current_spot
+
+    # À chaque rendu, on fabrique l'export global + bouton de téléchargement
+    export_spots = prepare_export_spots(st.session_state.spots)
+    export_data = {"version": 2, "spots": export_spots}
+    export_json = json.dumps(export_data, indent=2)
+
+    st.sidebar.download_button(
+        label="💾 Télécharger le fichier de ranges",
+        data=export_json,
+        file_name="ranges_poker_trainer.json",
+        mime="application/json",
+    )
 
     # -----------------------------------------------------
     # Aperçu des stats (pour un spot choisi, pondéré en combos)
@@ -587,3 +590,41 @@ def run_range_editor(username: str):
             f"- {ACTION_EMOJI['fold']} Fold : {fold_combos} combos, "
             f"soit **{fold_pct:.1f}%**"
         )
+
+
+# -----------------------------
+# Helper pour construire export_spots
+# -----------------------------
+def prepare_export_spots(spots_dict: dict) -> dict:
+    """
+    Transforme st.session_state.spots (structure interne)
+    en format exportable {"spot_key": {...}} avec actions par main.
+    """
+    export_spots = {}
+    for key, spot in spots_dict.items():
+        table_type = spot.get("table_type", "6-max")
+        pos = spot["position"]
+        stack = spot["stack"]
+        scen = spot["scenario"]
+        hand_actions = spot.get("hand_actions", {})
+
+        actions_dict = defaultdict(list)
+        for h in ALL_HANDS:
+            acts = hand_actions.get(h, set())
+            if not acts:
+                actions_dict["fold"].append(h)
+            else:
+                for act in acts:
+                    if act in ACTIONS:
+                        actions_dict[act].append(h)
+
+        export_spots[key] = {
+            "table_type": table_type,
+            "position": pos,
+            "stack": stack,
+            "scenario": scen,
+            "actions": {
+                act: sorted(hands) for act, hands in actions_dict.items()
+            },
+        }
+    return export_spots
