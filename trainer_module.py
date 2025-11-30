@@ -1019,3 +1019,33 @@ def run_trainer(username: str):
                 st.markdown(
                     f"- `{sk}` – {acc:.1f}% de réussite sur {total} essais"
                 )
+        #----------------------------
+        st.markdown("### 📈 Progression")
+
+        history = st.session_state.trainer_stats.get("history", [])
+        if not history:
+            st.info("Pas encore d'historique de mains pour tracer des courbes.")
+        else:
+            import pandas as pd
+
+            df = pd.DataFrame(history)
+            df["ts"] = pd.to_datetime(df["ts"], errors="coerce")
+            df["date"] = df["ts"].dt.date
+
+            agg = (
+                df.groupby("date")["success"]
+                .agg(["count", "mean"])
+                .reset_index()
+                .rename(columns={"count": "nb_mains", "mean": "accuracy"})
+            )
+            agg["accuracy"] = agg["accuracy"] * 100.0
+
+            st.line_chart(
+                agg.set_index("date")[["accuracy"]],
+                height=200,
+            )
+            st.bar_chart(
+                agg.set_index("date")[["nb_mains"]],
+                height=200,
+            )
+
