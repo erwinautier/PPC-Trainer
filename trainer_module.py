@@ -8,17 +8,7 @@ from collections import defaultdict
 
 import streamlit as st
 
-# =========================================================
-#  Intégration Supabase (stats en base)
-# =========================================================
-SUPABASE_STATS_TABLE = "trainer_stats"
-
-try:
-    # On suppose que tu as déjà ce module pour user_ranges
-    from supabase_client import get_supabase_client
-except ImportError:
-    get_supabase_client = None
-
+# ✨ Ajoute ceci
 from supabase import create_client, Client
 
 # -----------------------------
@@ -28,43 +18,31 @@ SUPABASE_URL = st.secrets.get("SUPABASE_URL")
 SUPABASE_ANON_KEY = st.secrets.get("SUPABASE_ANON_KEY")
 
 SUPABASE_STATS_TABLE = "trainer_stats"
-SUPABASE_STATS_COLUMN = "stats"   # ⚠️ mets "data" ici si ta colonne s'appelle data
+SUPABASE_STATS_COLUMN = "stats"   # 👉 mets "data" si ta colonne s'appelle data
 
 @st.cache_resource
 def get_supabase() -> Client | None:
     """
     Client Supabase partagé (caché par Streamlit).
-    Retourne None si la config n'est pas correcte.
+    Retourne None si la config est incomplète ou si l'init échoue.
     """
+    # 1) Vérif des secrets
+    if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+        st.sidebar.error(
+            "⚠️ SUPABASE_URL ou SUPABASE_ANON_KEY manquent dans st.secrets. "
+            "Les stats seront uniquement stockées en local."
+        )
+        return None
+
     try:
-        if not SUPABASE_URL or not SUPABASE_ANON_KEY:
-            st.sidebar.error(
-                "⚠️ SUPABASE_URL ou SUPABASE_ANON_KEY absents de st.secrets. "
-                "Stats uniquement en local."
-            )
-            return None
         client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        # Petit message discret pour confirmer que ça marche :
+        st.sidebar.caption("[DEBUG] Client Supabase (trainer) initialisé.")
         return client
     except Exception as e:
-        st.sidebar.error(f"⚠️ Erreur d'initialisation Supabase : {e}")
+        # Là tu auras ENFIN la vraie erreur
+        st.sidebar.error(f"⚠️ Erreur d'initialisation Supabase (trainer) : {e}")
         return None
-
-
-def get_supabase():
-    """
-    Renvoie un client Supabase déjà initialisé dans la session si possible.
-    Retourne None si Supabase n'est pas disponible.
-    """
-    if get_supabase_client is None:
-        return None
-
-    if "supabase_client" not in st.session_state:
-        try:
-            st.session_state.supabase_client = get_supabase_client()
-        except Exception:
-            st.session_state.supabase_client = None
-    return st.session_state.supabase_client
-
 
 # =========================================================
 #  Constantes & utilitaires communs
