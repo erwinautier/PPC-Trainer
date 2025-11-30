@@ -9,6 +9,34 @@ from collections import defaultdict
 import streamlit as st
 
 # =========================================================
+#  Intégration Supabase (stats en base)
+# =========================================================
+SUPABASE_STATS_TABLE = "trainer_stats"
+
+try:
+    # On suppose que tu as déjà ce module pour user_ranges
+    from supabase_client import get_supabase_client
+except ImportError:
+    get_supabase_client = None
+
+
+def get_supabase():
+    """
+    Renvoie un client Supabase déjà initialisé dans la session si possible.
+    Retourne None si Supabase n'est pas disponible.
+    """
+    if get_supabase_client is None:
+        return None
+
+    if "supabase_client" not in st.session_state:
+        try:
+            st.session_state.supabase_client = get_supabase_client()
+        except Exception:
+            st.session_state.supabase_client = None
+    return st.session_state.supabase_client
+
+
+# =========================================================
 #  Constantes & utilitaires communs
 # =========================================================
 
@@ -55,18 +83,18 @@ def base_dir():
 
 
 def user_ranges_path(username: str) -> str:
-    """Chemin du fichier de ranges perso pour un utilisateur."""
+    """Chemin du fichier de ranges perso pour un utilisateur (fallback)."""
     safe = "".join(c for c in username if c.isalnum() or c in ("_", "-"))
     return os.path.join(base_dir(), f"ranges_{safe}.json")
 
 
 def default_ranges_path() -> str:
-    """Chemin du fichier de ranges par défaut."""
+    """Chemin du fichier de ranges par défaut (fallback)."""
     return os.path.join(base_dir(), "default_ranges.json")
 
 
 def trainer_stats_path(username: str) -> str:
-    """Chemin du fichier de stats / Leitner pour le trainer."""
+    """Chemin du fichier de stats / Leitner pour le trainer (fallback)."""
     safe = "".join(c for c in username if c.isalnum() or c in ("_", "-"))
     return os.path.join(base_dir(), f"trainer_stats_{safe}.json")
 
@@ -110,7 +138,7 @@ for i in range(len(RANKS)):
 
 
 # =========================================================
-#  Chargement des ranges (défaut + perso)
+#  Chargement des ranges (défaut + perso, toujours en fichier)
 # =========================================================
 
 def load_ranges_file(path: str) -> dict:
@@ -136,22 +164,17 @@ def load_ranges_file(path: str) -> dict:
 
 
 # =========================================================
-#  Stats / Leitner simplifié
+#  Stats / Leitner simplifié (Supabase + fallback fichier)
 # =========================================================
 
-def load_trainer_stats(username: str) -> dict:
-    """
-    Charge les stats du trainer. Format :
-    {
-      "spots": {
-        spot_key: {"success": int, "fail": int}
-      },
-      "total": {"success": int, "fail": int}
-    }
-    """
+def default_stats_dict() -> dict:
+    return {"spots": {}, "total": {"success": 0, "fail": 0}}
+
+
+def load_trainer_stats_from_file(username: str) -> dict:
     path = trainer_stats_path(username)
     if not os.path.exists(path):
-        return {"spots": {}, "total": {"success": 0, "fail": 0}}
+        return default_stats_dict()
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
@@ -159,16 +182,105 @@ def load_trainer_stats(username: str) -> dict:
             return data
     except Exception:
         pass
-    return {"spots": {}, "total": {"success": 0, "fail": 0}}
+    return default_stats_dict()
 
 
-def save_trainer_stats(username: str, stats: dict):
+def save_trainer_stats_to_file(username: str, stats: dict):
     path = trainer_stats_path(username)
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(stats, f, indent=2)
     except Exception:
         pass
+
+def load_trainer_stats_from_supabase(username: str) -> dict:
+    """
+    Charge les stats depuis Supabase.
+    Si rien trouvé, renvoie un dict par défaut.
+    Si erreur, renvoie None (pour permettre un fallback local).
+    """
+    client = get_supabase()
+    if client is None:
+        st.sidebar.warning("[DEBUG] Supabase non disponible pour charger les stats.")
+        return None
+
+    try:
+        res = (
+            client.table(SUPABASE_STATS_TABLE)
+            .select(SUPABASE_STATS_COLUMN)
+            .eq("username", username)
+            .execute()
+        )
+        rows = res.data or []
+
+        if not rows:
+            st.sidebar.caption(f"[DEBUG] Aucune ligne trainer_stats pour {username} (Supabase).")
+            return default_stats_dict()
+
+        stats = rows[0].get(SUPABASE_STATS_COLUMN)
+
+        if isinstance(stats, dict) and "spots" in stats and "total" in stats:
+            st.sidebar.caption(f"[DEBUG] Stats Supabase trouvées pour {username}.")
+            return stats
+
+        st.sidebar.warning(
+            f"[DEBUG] Format de stats invalide en base pour {username}, "
+            "on repart sur des stats vierges."
+        )
+        return default_stats_dict()
+
+    except Exception as e:
+        st.sidebar.error(f"[Supabase trainer_stats] Erreur lors du SELECT : {e}")
+        return None
+
+
+
+def save_trainer_stats_to_supabase(username: str, stats: dict):
+    """
+    Sauvegarde les stats dans Supabase (table trainer_stats).
+    Affiche les erreurs en clair dans la sidebar.
+    """
+    client = get_supabase()
+    if client is None:
+        st.sidebar.warning("[DEBUG] Supabase non disponible (client=None) – stats seulement en local.")
+        return
+
+    try:
+        payload = {
+            "username": username,
+            SUPABASE_STATS_COLUMN: stats,  # "stats" ou "data" suivant ta table
+        }
+
+        res = (
+            client.table(SUPABASE_STATS_TABLE)
+            .upsert(payload)
+            .execute()
+        )
+
+        st.sidebar.caption(f"[DEBUG] Sauvegarde stats Supabase OK pour {username}.")
+        # Tu peux afficher aussi le retour si besoin :
+        # st.sidebar.write(res)
+    except Exception as e:
+        st.sidebar.error(f"[Supabase trainer_stats] Erreur lors de l'upsert : {e}")
+
+def load_trainer_stats(username: str) -> dict:
+    """
+    Charge les stats du trainer en priorité depuis Supabase.
+    Si Supabase n'est pas dispo ou échoue, on retombe sur le fichier JSON.
+    """
+    stats = load_trainer_stats_from_supabase(username)
+    if stats is not None:
+        return stats
+    # fallback fichier
+    return load_trainer_stats_from_file(username)
+
+
+def save_trainer_stats(username: str, stats: dict):
+    """
+    Sauvegarde les stats dans Supabase + fallback fichier.
+    """
+    save_trainer_stats_to_supabase(username, stats)
+    save_trainer_stats_to_file(username, stats)
 
 
 def update_stats(stats: dict, spot_key: str, success: bool):
@@ -343,7 +455,7 @@ def render_correction_range_html(actions_for_spot: dict, hero_hand: str = None) 
 
             highlight_style = ""
             if hero_hand and hand.upper() == hero_hand.upper():
-                highlight_style = "background-color:#FF9499;border-radius:4px;"
+                highlight_style = "background-color:#E5E7EB;border-radius:4px;"
 
             cell = (
                 f"<td style='padding:1px;width:32px;height:32px;"
@@ -552,7 +664,7 @@ def run_trainer(username: str):
     if "last_feedback" not in st.session_state:
         st.session_state.last_feedback = None
 
-    # ----------- Chargement des ranges -----------
+    # ----------- Chargement des ranges (toujours fichiers) -----------
     default_ranges = load_ranges_file(default_ranges_path())
     user_ranges = load_ranges_file(user_ranges_path(username))
 
@@ -711,7 +823,7 @@ def run_trainer(username: str):
         # ----- Phrase de scénario bien visible -----
         scenario_sentence = scenario_to_sentence(table_type_s, position_s, scenario_s)
         st.markdown(
-            f"<div style='font-size:20px;font-weight:500;margin:4px 0 16px 0;'>"
+            f"<div style='font-size:16px;font-weight:500;margin:4px 0 16px 0;'>"
             f"{scenario_sentence}"
             "</div>",
             unsafe_allow_html=True,
@@ -741,6 +853,7 @@ def run_trainer(username: str):
                 and current_spot["spot_key"]
             ):
                 update_stats(stats, current_spot["spot_key"], success=correct)
+                # 🔐 Sauvegarde dans Supabase + fichier
                 save_trainer_stats(username, stats)
 
             if mode == "Entraînement libre":
