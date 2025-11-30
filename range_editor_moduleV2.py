@@ -433,7 +433,14 @@ def run_range_editor(username: str):
     # Scénarios possibles : open + vs_open des positions précédentes
     pos_index = positions_list.index(position)
     previous_positions = positions_list[:pos_index]
+
+    # Scénarios standards : open + vs_open
     available_scenarios = ["open"] + [f"vs_open_{p}" for p in previous_positions]
+
+    # 🆕 Ajout du limp de SB (que pour BTN et BB !)
+    if "SB" in previous_positions:
+        available_scenarios.append("vs_limp_SB")
+
 
     with col_sel3:
         default_idx = (
