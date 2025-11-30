@@ -180,9 +180,19 @@ def load_user_ranges_from_supabase(username: str) -> dict:
     Lit les ranges de l'utilisateur dans la table user_ranges.
     Retourne un dict {version, spots} ou {}.
     """
+    client = get_supabase()
+    if client is None:
+        # Pas de Supabase → on considère simplement qu'il n'y a rien en ligne
+        return {}
+
     try:
-        resp = supabase.table("user_ranges").select("data")\
-            .eq("username", username).limit(1).execute()
+        resp = (
+            client.table("user_ranges")
+            .select("data")
+            .eq("username", username)
+            .limit(1)
+            .execute()
+        )
         rows = resp.data
         if not rows:
             return {}
@@ -198,15 +208,26 @@ def save_user_ranges_to_supabase(username: str, export_data: dict):
     Sauvegarde (upsert) les ranges de l'utilisateur dans user_ranges.
     Affiche clairement le succès ou l'erreur.
     """
+    client = get_supabase()
+    if client is None:
+        st.sidebar.warning(
+            "[DEBUG] Supabase non disponible pour les ranges – "
+            "les modifications ne sont enregistrées que dans le fichier téléchargé."
+        )
+        return
+
     try:
-        resp = supabase.table("user_ranges").upsert({
-            "username": username,
-            "data": export_data,
-        }).execute()
-        # Si tout va bien, on a resp.data (liste avec la ligne upsertée)
+        resp = (
+            client.table("user_ranges")
+            .upsert(
+                {
+                    "username": username,
+                    "data": export_data,
+                }
+            )
+            .execute()
+        )
         st.sidebar.success("Ranges enregistrées dans Supabase ✅")
-        # Debug léger dans la console Streamlit (facultatif)
-        # st.write("DEBUG upsert user_ranges:", resp)
     except Exception as e:
         st.sidebar.error(f"Erreur Supabase user_ranges : {repr(e)}")
 
