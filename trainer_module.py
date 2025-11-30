@@ -83,6 +83,36 @@ ACTION_EMOJI = {
 }
 
 
+def load_user_ranges_from_supabase(username: str) -> dict:
+    client = get_supabase()
+    if client is None:
+        return {}
+
+    try:
+        resp = (
+            client.table("user_ranges")
+            .select("ranges_json")
+            .eq("username", username)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            return {}
+
+        data = rows[0].get("ranges_json") or {}
+        if "spots" in data and isinstance(data["spots"], dict):
+            return data
+        if isinstance(data, dict) and any(
+            isinstance(v, dict) and "position" in v for v in data.values()
+        ):
+            return {"version": 2, "spots": data}
+        return {}
+    except Exception as e:
+        st.sidebar.warning(f"[Supabase user_ranges] Erreur lecture : {e}")
+        return {}
+
+
 def base_dir():
     """Dossier racine (compatible exécutable)."""
     if getattr(sys, "frozen", False):
@@ -176,7 +206,12 @@ def load_ranges_file(path: str) -> dict:
 # =========================================================
 
 def default_stats_dict() -> dict:
-    return {"spots": {}, "total": {"success": 0, "fail": 0}}
+    return {
+        "spots": {},
+        "total": {"success": 0, "fail": 0},
+        "history": [],   # nouveau : historique des coups
+    }
+
 
 
 def load_trainer_stats_from_file(username: str) -> dict:
@@ -291,6 +326,8 @@ def save_trainer_stats(username: str, stats: dict):
     save_trainer_stats_to_file(username, stats)
 
 
+from datetime import datetime
+
 def update_stats(stats: dict, spot_key: str, success: bool):
     spots = stats.setdefault("spots", {})
     s = spots.setdefault(spot_key, {"success": 0, "fail": 0})
@@ -300,6 +337,17 @@ def update_stats(stats: dict, spot_key: str, success: bool):
     else:
         s["fail"] += 1
         stats["total"]["fail"] += 1
+
+    # Historique temporel pour les graphes
+    history = stats.setdefault("history", [])
+    history.append(
+        {
+            "ts": datetime.utcnow().isoformat(),
+            "spot_key": spot_key,
+            "success": bool(success),
+        }
+    )
+
 
 def reset_trainer_stats(username: str) -> dict:
     """Remet toutes les stats du joueur à zéro (Supabase + fichier)."""
@@ -687,7 +735,12 @@ def run_trainer(username: str):
 
     # ----------- Chargement des ranges (toujours fichiers) -----------
     default_ranges = load_ranges_file(default_ranges_path())
-    user_ranges = load_ranges_file(user_ranges_path(username))
+
+    user_ranges = load_user_ranges_from_supabase(username)
+    if not user_ranges.get("spots"):
+        # fallback local
+        user_ranges = load_ranges_file(user_ranges_path(username))
+
 
     st.markdown(f"*Trainer – profil **{username}***")
     st.markdown("### 🧠 Poker Trainer – Ranges & Leitner")
@@ -944,3 +997,25 @@ def run_trainer(username: str):
                     hero_hand=spot["hand"],
                 )
                 st.markdown(html_table, unsafe_allow_html=True)
+                #-----
+        st.markdown("### 📌 Spots à retravailler")
+
+        stats_dict = st.session_state.trainer_stats
+        spot_stats = stats_dict.get("spots", {})
+        rows = []
+        for sk, s in spot_stats.items():
+            total = s.get("success", 0) + s.get("fail", 0)
+            if total < 5:
+                continue  # on ignore les spots peu vus
+            acc = s.get("success", 0) / total * 100.0
+            rows.append((acc, total, sk))
+
+        if not rows:
+            st.info("Pas encore assez de données pour détecter des leaks.")
+        else:
+            rows.sort()  # du plus faible au plus fort
+            worst = rows[:5]
+            for acc, total, sk in worst:
+                st.markdown(
+                    f"- `{sk}` – {acc:.1f}% de réussite sur {total} essais"
+                )
