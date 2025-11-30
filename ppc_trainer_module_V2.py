@@ -7,23 +7,32 @@ import random
 from collections import defaultdict
 
 import streamlit as st
-from supabase import create_client, Client  # 👈 NEW
 
 # =========================================================
-#  Supabase client
+#  Intégration Supabase (stats en base)
 # =========================================================
+SUPABASE_STATS_TABLE = "trainer_stats"
 
-def get_supabase_client() -> Client:
+try:
+    # On suppose que tu as déjà ce module pour user_ranges
+    from supabase_client import get_supabase_client
+except ImportError:
+    get_supabase_client = None
+
+
+def get_supabase():
     """
-    Crée (ou récupère) un client Supabase à partir de st.secrets.
-    On suppose que tu as déjà :
-    st.secrets["supabase"]["url"]
-    st.secrets["supabase"]["anon_key"]
+    Renvoie un client Supabase déjà initialisé dans la session si possible.
+    Retourne None si Supabase n'est pas disponible.
     """
+    if get_supabase_client is None:
+        return None
+
     if "supabase_client" not in st.session_state:
-        url = st.secrets["supabase"]["url"]
-        key = st.secrets["supabase"]["anon_key"]
-        st.session_state.supabase_client = create_client(url, key)
+        try:
+            st.session_state.supabase_client = get_supabase_client()
+        except Exception:
+            st.session_state.supabase_client = None
     return st.session_state.supabase_client
 
 
@@ -74,14 +83,20 @@ def base_dir():
 
 
 def user_ranges_path(username: str) -> str:
-    """Chemin du fichier de ranges perso pour un utilisateur."""
+    """Chemin du fichier de ranges perso pour un utilisateur (fallback)."""
     safe = "".join(c for c in username if c.isalnum() or c in ("_", "-"))
     return os.path.join(base_dir(), f"ranges_{safe}.json")
 
 
 def default_ranges_path() -> str:
-    """Chemin du fichier de ranges par défaut."""
+    """Chemin du fichier de ranges par défaut (fallback)."""
     return os.path.join(base_dir(), "default_ranges.json")
+
+
+def trainer_stats_path(username: str) -> str:
+    """Chemin du fichier de stats / Leitner pour le trainer (fallback)."""
+    safe = "".join(c for c in username if c.isalnum() or c in ("_", "-"))
+    return os.path.join(base_dir(), f"trainer_stats_{safe}.json")
 
 
 def canonical_hand_from_indices(i: int, j: int) -> str:
@@ -123,7 +138,7 @@ for i in range(len(RANKS)):
 
 
 # =========================================================
-#  Chargement des ranges (défaut + perso)
+#  Chargement des ranges (défaut + perso, toujours en fichier)
 # =========================================================
 
 def load_ranges_file(path: str) -> dict:
@@ -149,80 +164,106 @@ def load_ranges_file(path: str) -> dict:
 
 
 # =========================================================
-#  Stats / Leitner via SUPABASE
+#  Stats / Leitner simplifié (Supabase + fallback fichier)
 # =========================================================
 
-def load_trainer_stats(username: str) -> dict:
-    """
-    Charge les stats du trainer depuis Supabase.
-    Format renvoyé :
-    {
-      "spots": {
-        spot_key: {"success": int, "fail": int}
-      },
-      "total": {"success": int, "fail": int}
-    }
-    """
-    supabase = get_supabase_client()
-    stats = {"spots": {}, "total": {"success": 0, "fail": 0}}
+def default_stats_dict() -> dict:
+    return {"spots": {}, "total": {"success": 0, "fail": 0}}
+
+
+def load_trainer_stats_from_file(username: str) -> dict:
+    path = trainer_stats_path(username)
+    if not os.path.exists(path):
+        return default_stats_dict()
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if "spots" in data and "total" in data:
+            return data
+    except Exception:
+        pass
+    return default_stats_dict()
+
+
+def save_trainer_stats_to_file(username: str, stats: dict):
+    path = trainer_stats_path(username)
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(stats, f, indent=2)
+    except Exception:
+        pass
+
+
+def load_trainer_stats_from_supabase(username: str) -> dict:
+    client = get_supabase()
+    if client is None:
+        return None  # on signalera qu'on ne peut pas utiliser Supabase
 
     try:
-        resp = (
-            supabase.table("trainer_stats")
-            .select("spot_key, success, fail")
+        res = (
+            client.table(SUPABASE_STATS_TABLE)
+            .select("stats")
             .eq("username", username)
             .execute()
         )
-        rows = resp.data or []
-        for row in rows:
-            spot_key = row["spot_key"]
-            s = int(row.get("success", 0) or 0)
-            f = int(row.get("fail", 0) or 0)
-            stats["spots"][spot_key] = {"success": s, "fail": f}
-            stats["total"]["success"] += s
-            stats["total"]["fail"] += f
-    except Exception as e:
-        st.warning(f"Impossible de charger les stats dans Supabase : {repr(e)}")
+        rows = res.data or []
+        if not rows:
+            # Aucun enregistrement pour cet utilisateur
+            return default_stats_dict()
+        stats = rows[0].get("stats")
+        if isinstance(stats, dict) and "spots" in stats and "total" in stats:
+            return stats
+        return default_stats_dict()
+    except Exception:
+        # En cas de souci, on ne casse pas l'app
+        return None
 
-    return stats
 
+def save_trainer_stats_to_supabase(username: str, stats: dict):
+    client = get_supabase()
+    if client is None:
+        return  # on ne fait rien, fallback fichier prendra le relais
 
-def upsert_spot_stats_in_supabase(username: str, spot_key: str, s: int, f: int):
-    """Upsert (insert/update) des stats de spot dans la table trainer_stats."""
-    supabase = get_supabase_client()
     try:
-        supabase.table("trainer_stats").upsert(
-            {
-                "username": username,
-                "spot_key": spot_key,
-                "success": s,
-                "fail": f,
-            }
-        ).execute()
-    except Exception as e:
-        st.warning(f"Erreur Supabase (trainer_stats) : {repr(e)}")
+        (
+            client.table(SUPABASE_STATS_TABLE)
+            .upsert({"username": username, "stats": stats})
+            .execute()
+        )
+    except Exception:
+        # On ignore les erreurs ici pour ne pas planter le trainer
+        pass
 
 
-def update_stats(username: str, stats: dict, spot_key: str, success: bool):
+def load_trainer_stats(username: str) -> dict:
     """
-    Met à jour les stats en mémoire ET dans Supabase.
+    Charge les stats du trainer en priorité depuis Supabase.
+    Si Supabase n'est pas dispo ou échoue, on retombe sur le fichier JSON.
     """
+    stats = load_trainer_stats_from_supabase(username)
+    if stats is not None:
+        return stats
+    # fallback fichier
+    return load_trainer_stats_from_file(username)
+
+
+def save_trainer_stats(username: str, stats: dict):
+    """
+    Sauvegarde les stats dans Supabase + fallback fichier.
+    """
+    save_trainer_stats_to_supabase(username, stats)
+    save_trainer_stats_to_file(username, stats)
+
+
+def update_stats(stats: dict, spot_key: str, success: bool):
     spots = stats.setdefault("spots", {})
-    s_entry = spots.setdefault(spot_key, {"success": 0, "fail": 0})
-
+    s = spots.setdefault(spot_key, {"success": 0, "fail": 0})
     if success:
-        s_entry["success"] += 1
+        s["success"] += 1
         stats["total"]["success"] += 1
     else:
-        s_entry["fail"] += 1
+        s["fail"] += 1
         stats["total"]["fail"] += 1
-
-    upsert_spot_stats_in_supabase(
-        username,
-        spot_key,
-        s_entry["success"],
-        s_entry["fail"],
-    )
 
 
 def get_spot_weight(stats: dict, spot_key: str) -> float:
@@ -450,7 +491,9 @@ def scenario_to_sentence(table_type: str, position: str, scenario: str) -> str:
 
     if scenario.startswith("vs_open_"):
         vil_pos = scenario.split("_", 2)[2]
-        return f"{vil_pos} a open avant toi : tu joues en {position} face à son open."
+        return (
+            f"{vil_pos} a open avant toi : tu joues en {position} face à son open."
+        )
 
     return f"Scénario : {scenario}"
 
@@ -593,7 +636,7 @@ def run_trainer(username: str):
     if "last_feedback" not in st.session_state:
         st.session_state.last_feedback = None
 
-    # ----------- Chargement des ranges -----------
+    # ----------- Chargement des ranges (toujours fichiers) -----------
     default_ranges = load_ranges_file(default_ranges_path())
     user_ranges = load_ranges_file(user_ranges_path(username))
 
@@ -776,17 +819,14 @@ def run_trainer(username: str):
 
             correct = evaluate_answer(action_key, hero_hand, actions_for_spot)
 
-            stats_local = st.session_state.trainer_stats
+            stats = st.session_state.trainer_stats
             if (
                 mode == "Avec ranges de correction"
                 and current_spot["spot_key"]
             ):
-                update_stats(
-                    username,
-                    stats_local,
-                    current_spot["spot_key"],
-                    success=correct,
-                )
+                update_stats(stats, current_spot["spot_key"], success=correct)
+                # 🔐 Sauvegarde dans Supabase + fichier
+                save_trainer_stats(username, stats)
 
             if mode == "Entraînement libre":
                 st.session_state.last_feedback = {
