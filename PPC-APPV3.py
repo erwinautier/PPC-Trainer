@@ -17,24 +17,30 @@ def get_supabase() -> Client | None:
     Client Supabase partagé. Retourne None si la config est absente
     ou si l'initialisation échoue.
     """
-    url = SUPABASE_URL
-    key = SUPABASE_ANON_KEY
+    url = (SUPABASE_URL or "").strip()
+    key = (SUPABASE_ANON_KEY or "").strip()
+
+    # Petit debug sans exposer les secrets :
+    st.sidebar.caption(
+        f"[DEBUG] SUPABASE_URL défini: {bool(url)} | SUPABASE_ANON_KEY défini: {bool(key)}"
+    )
 
     if not url or not key:
-        # On nève PAS d'exception, on affiche juste un message.
+        # On ne lève PAS d'exception, on affiche juste un message clair.
         st.sidebar.error(
             "⚠️ SUPABASE_URL ou SUPABASE_ANON_KEY manquent dans st.secrets. "
-            "Les données seront seulement stockées en local."
+            "Les comptes utilisateurs ne peuvent pas être vérifiés."
         )
         return None
 
     try:
         client = create_client(url, key)
-        st.sidebar.caption("[DEBUG] Client Supabase global initialisé.")
+        st.sidebar.caption("[DEBUG] Client Supabase global initialisé ✅")
         return client
     except Exception as e:
         st.sidebar.error(f"⚠️ Erreur d'initialisation Supabase (global) : {e}")
         return None
+
 
 
 # =========================================================
