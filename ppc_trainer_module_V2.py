@@ -194,50 +194,74 @@ def save_trainer_stats_to_file(username: str, stats: dict):
         pass
 
 def load_trainer_stats_from_supabase(username: str) -> dict:
+    """
+    Charge les stats depuis Supabase.
+    Si rien trouvé, renvoie un dict par défaut.
+    Si erreur, renvoie None (pour permettre un fallback local).
+    """
     client = get_supabase()
     if client is None:
-        st.caption("[DEBUG] Supabase non disponible pour charger les stats.")
-        return None  # on signalera qu'on ne peut pas utiliser Supabase
+        st.sidebar.warning("[DEBUG] Supabase non disponible pour charger les stats.")
+        return None
 
     try:
         res = (
             client.table(SUPABASE_STATS_TABLE)
-            .select("stats")
+            .select(SUPABASE_STATS_COLUMN)
             .eq("username", username)
             .execute()
         )
         rows = res.data or []
+
         if not rows:
-            st.caption(f"[DEBUG] Aucune ligne trainer_stats pour {username} (Supabase).")
+            st.sidebar.caption(f"[DEBUG] Aucune ligne trainer_stats pour {username} (Supabase).")
             return default_stats_dict()
-        stats = rows[0].get("stats")
+
+        stats = rows[0].get(SUPABASE_STATS_COLUMN)
+
         if isinstance(stats, dict) and "spots" in stats and "total" in stats:
-            st.caption(f"[DEBUG] Stats Supabase trouvées pour {username}.")
+            st.sidebar.caption(f"[DEBUG] Stats Supabase trouvées pour {username}.")
             return stats
-        st.caption(f"[DEBUG] Format stats invalide pour {username}, fallback par défaut.")
+
+        st.sidebar.warning(
+            f"[DEBUG] Format de stats invalide en base pour {username}, "
+            "on repart sur des stats vierges."
+        )
         return default_stats_dict()
+
     except Exception as e:
-        st.error(f"[Supabase trainer_stats] Erreur lors du SELECT : {e}")
+        st.sidebar.error(f"[Supabase trainer_stats] Erreur lors du SELECT : {e}")
         return None
 
 
 
 def save_trainer_stats_to_supabase(username: str, stats: dict):
+    """
+    Sauvegarde les stats dans Supabase (table trainer_stats).
+    Affiche les erreurs en clair dans la sidebar.
+    """
     client = get_supabase()
     if client is None:
-        st.info("Supabase non disponible (client=None), sauvegarde des stats uniquement en local.")
+        st.sidebar.warning("[DEBUG] Supabase non disponible (client=None) – stats seulement en local.")
         return
 
     try:
+        payload = {
+            "username": username,
+            SUPABASE_STATS_COLUMN: stats,  # "stats" ou "data" suivant ta table
+        }
+
         res = (
             client.table(SUPABASE_STATS_TABLE)
-            .upsert({"username": username, "stats": stats})
+            .upsert(payload)
             .execute()
         )
-        # Petit message discret pour vérifier que ça passe (tu pourras le retirer après debug)
-        st.caption(f"[DEBUG] Sauvegarde stats Supabase OK pour {username}.")
+
+        st.sidebar.caption(f"[DEBUG] Sauvegarde stats Supabase OK pour {username}.")
+        # Tu peux afficher aussi le retour si besoin :
+        # st.sidebar.write(res)
     except Exception as e:
-        st.error(f"[Supabase trainer_stats] Erreur lors de l'upsert : {e}")
+        st.sidebar.error(f"[Supabase trainer_stats] Erreur lors de l'upsert : {e}")
 
 def load_trainer_stats(username: str) -> dict:
     """
