@@ -193,10 +193,10 @@ def save_trainer_stats_to_file(username: str, stats: dict):
     except Exception:
         pass
 
-
 def load_trainer_stats_from_supabase(username: str) -> dict:
     client = get_supabase()
     if client is None:
+        st.caption("[DEBUG] Supabase non disponible pour charger les stats.")
         return None  # on signalera qu'on ne peut pas utiliser Supabase
 
     try:
@@ -208,32 +208,36 @@ def load_trainer_stats_from_supabase(username: str) -> dict:
         )
         rows = res.data or []
         if not rows:
-            # Aucun enregistrement pour cet utilisateur
+            st.caption(f"[DEBUG] Aucune ligne trainer_stats pour {username} (Supabase).")
             return default_stats_dict()
         stats = rows[0].get("stats")
         if isinstance(stats, dict) and "spots" in stats and "total" in stats:
+            st.caption(f"[DEBUG] Stats Supabase trouvées pour {username}.")
             return stats
+        st.caption(f"[DEBUG] Format stats invalide pour {username}, fallback par défaut.")
         return default_stats_dict()
-    except Exception:
-        # En cas de souci, on ne casse pas l'app
+    except Exception as e:
+        st.error(f"[Supabase trainer_stats] Erreur lors du SELECT : {e}")
         return None
+
 
 
 def save_trainer_stats_to_supabase(username: str, stats: dict):
     client = get_supabase()
     if client is None:
-        return  # on ne fait rien, fallback fichier prendra le relais
+        st.info("Supabase non disponible (client=None), sauvegarde des stats uniquement en local.")
+        return
 
     try:
-        (
+        res = (
             client.table(SUPABASE_STATS_TABLE)
             .upsert({"username": username, "stats": stats})
             .execute()
         )
-    except Exception:
-        # On ignore les erreurs ici pour ne pas planter le trainer
-        pass
-
+        # Petit message discret pour vérifier que ça passe (tu pourras le retirer après debug)
+        st.caption(f"[DEBUG] Sauvegarde stats Supabase OK pour {username}.")
+    except Exception as e:
+        st.error(f"[Supabase trainer_stats] Erreur lors de l'upsert : {e}")
 
 def load_trainer_stats(username: str) -> dict:
     """
