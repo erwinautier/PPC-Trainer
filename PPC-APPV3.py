@@ -8,8 +8,8 @@ import secrets   # ⬅⬅⬅ AJOUTER ÇA
 import streamlit as st
 from supabase import create_client, Client
 
-SUPABASE_URL = st.secrets.get("SUPABASE_URL", "")
-SUPABASE_ANON_KEY = st.secrets.get("SUPABASE_ANON_KEY", "")
+url = st.secrets.get("SUPABASE_URL", "")
+anon_key = st.secrets.get("SUPABASE_ANON_KEY", "")
 
 @st.cache_resource
 def get_supabase() -> Client | None:
