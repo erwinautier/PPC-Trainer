@@ -301,6 +301,13 @@ def update_stats(stats: dict, spot_key: str, success: bool):
         s["fail"] += 1
         stats["total"]["fail"] += 1
 
+def reset_trainer_stats(username: str) -> dict:
+    """Remet toutes les stats du joueur à zéro (Supabase + fichier)."""
+    stats = default_stats_dict()
+    save_trainer_stats(username, stats)
+    return stats
+
+
 
 def get_spot_weight(stats: dict, spot_key: str) -> float:
     """
