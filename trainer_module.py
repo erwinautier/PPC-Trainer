@@ -19,6 +19,36 @@ try:
 except ImportError:
     get_supabase_client = None
 
+from supabase import create_client, Client
+
+# -----------------------------
+#  Config Supabase pour les stats
+# -----------------------------
+SUPABASE_URL = st.secrets.get("SUPABASE_URL")
+SUPABASE_ANON_KEY = st.secrets.get("SUPABASE_ANON_KEY")
+
+SUPABASE_STATS_TABLE = "trainer_stats"
+SUPABASE_STATS_COLUMN = "stats"   # ⚠️ mets "data" ici si ta colonne s'appelle data
+
+@st.cache_resource
+def get_supabase() -> Client | None:
+    """
+    Client Supabase partagé (caché par Streamlit).
+    Retourne None si la config n'est pas correcte.
+    """
+    try:
+        if not SUPABASE_URL or not SUPABASE_ANON_KEY:
+            st.sidebar.error(
+                "⚠️ SUPABASE_URL ou SUPABASE_ANON_KEY absents de st.secrets. "
+                "Stats uniquement en local."
+            )
+            return None
+        client = create_client(SUPABASE_URL, SUPABASE_ANON_KEY)
+        return client
+    except Exception as e:
+        st.sidebar.error(f"⚠️ Erreur d'initialisation Supabase : {e}")
+        return None
+
 
 def get_supabase():
     """
