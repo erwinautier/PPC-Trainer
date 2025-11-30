@@ -767,6 +767,14 @@ def run_trainer(username: str):
             f"- Mauvaises réponses : **{total_f}**  \n"
             f"- Précision : **{acc:.1f}%**"
         )
+        st.markdown("---")
+        if st.button("🔄 Remettre toutes mes stats à zéro"):
+            new_stats = reset_trainer_stats(username)
+            st.session_state.trainer_stats = new_stats
+            st.session_state.current_spot = None
+            st.session_state.last_feedback = None
+            st.success("Stats remises à zéro pour ce profil.")
+
 
     # ===============================
     # Colonne droite : spot + actions
