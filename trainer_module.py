@@ -14,8 +14,8 @@ from supabase import create_client, Client
 # -----------------------------
 #  Config Supabase pour les stats
 # -----------------------------
-SUPABASE_URL = st.secrets.get("SUPABASE_URL")
-SUPABASE_ANON_KEY = st.secrets.get("SUPABASE_ANON_KEY")
+SUPABASE_URL = st.secrets.get("https://bwskgvxasuwzghtyiidy.supabase.co")
+SUPABASE_ANON_KEY = st.secrets.get("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ3c2tndnhhc3V3emdodHlpaWR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ0MjcxMjAsImV4cCI6MjA4MDAwMzEyMH0.70w0HwV-1irxTMGdgUBPPFU59xlLemp_CR6CQgFEuUU")
 
 SUPABASE_STATS_TABLE = "trainer_stats"
 SUPABASE_STATS_COLUMN = "stats"   # 👉 mets "data" si ta colonne s'appelle data
