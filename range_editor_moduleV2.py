@@ -395,7 +395,7 @@ def run_range_editor(username: str):
                 export_spots_local = prepare_export_spots(st.session_state.spots)
                 export_data_local = {"version": 2, "spots": export_spots_local}
                 save_user_ranges_to_supabase(username, export_data_local)
-                st.rerun()
+                #st.rerun()
         except Exception as e:
             st.sidebar.error(f"Erreur de lecture du fichier : {e}")
 
