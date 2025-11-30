@@ -654,6 +654,12 @@ def evaluate_answer(hero_action: str, hero_hand: str, actions_for_spot: dict) ->
 # =========================================================
 
 def run_trainer(username: str):
+    # DEBUG : lister les clés de secrets sans montrer les valeurs
+    try:
+        secret_keys = list(st.secrets.keys())
+    except Exception:
+        secret_keys = []
+    st.sidebar.caption(f"[DEBUG] Secrets présents : {secret_keys}")
     # ----------- Initialisation état session -----------
     if "trainer_user" not in st.session_state:
         st.session_state.trainer_user = username
