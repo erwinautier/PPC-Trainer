@@ -210,7 +210,7 @@ except ImportError:
 
 try:
     # tu m'as envoyé range_editor_module.py
-    from range_editor_module import run_range_editor
+    from range_editor_moduleV2 import run_range_editor
 except ImportError:
     run_range_editor = None
 
